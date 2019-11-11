@@ -303,8 +303,9 @@ constexpr void sink(
                 out.emplace(in.get());
             }
         } else {
+            struct invalid_type {};
             static_assert(
-                false, "Output supports neither emplace_back(), push_back(), nor emplace().");
+                std::is_same_v<Out, invalid_type>, "Output supports neither emplace_back(), push_back(), nor emplace().");
         }
 
         in.next();
