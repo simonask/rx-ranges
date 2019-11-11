@@ -277,6 +277,7 @@ constexpr void sink(
     // supports emplacement, the tuple will be unpacked and passed as individual arguments to the
     // emplace member function on the output. Otherwise, the tuple-like object will be passed as-is.
 
+    struct invalid_type {};
     while (!in.at_end()) {
         if constexpr (has_emplace_back_v<Out>) {
             if constexpr (is_tuple_v<output_type>) {
@@ -302,8 +303,7 @@ constexpr void sink(
             } else {
                 out.emplace(in.get());
             }
-        } else {
-            struct invalid_type {};
+        } else if (!std::is_same_v<Out, invalid_type>) {
             static_assert(
                 std::is_same_v<Out, invalid_type>, "Output supports neither emplace_back(), push_back(), nor emplace().");
         }
