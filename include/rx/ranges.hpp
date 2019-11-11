@@ -256,6 +256,11 @@ end(const R&, std::enable_if_t<is_input_range_v<R>>* = nullptr) noexcept {
     return input_range_iterator_end {};
 }
 
+namespace detail {
+    template <class T>
+    struct invalid_type {};
+}
+
 /// Copy elements from an rvalue InputRange to output.
 ///
 /// @tparam In The range to copy from.
@@ -277,7 +282,6 @@ constexpr void sink(
     // supports emplacement, the tuple will be unpacked and passed as individual arguments to the
     // emplace member function on the output. Otherwise, the tuple-like object will be passed as-is.
 
-    struct invalid_type {};
     while (!in.at_end()) {
         if constexpr (has_emplace_back_v<Out>) {
             if constexpr (is_tuple_v<output_type>) {
@@ -303,9 +307,9 @@ constexpr void sink(
             } else {
                 out.emplace(in.get());
             }
-        } else if (!std::is_same_v<Out, invalid_type>) {
+        } else if constexpr (!std::is_same_v<Out, detail::invalid_type<output_type>>) {
             static_assert(
-                std::is_same_v<Out, invalid_type>, "Output supports neither emplace_back(), push_back(), nor emplace().");
+                std::is_same_v<Out, detail::invalid_type<output_type>>, "Output supports neither emplace_back(), push_back(), nor emplace().");
         }
 
         in.next();
