@@ -6,6 +6,7 @@
 #include <set>
 #include <vector>
 #include <type_traits>
+#include <algorithm>
 
 #if !defined(RX_NAMESPACE_OVERRIDE)
 #define RX_NAMESPACE rx
@@ -34,11 +35,11 @@
 #endif
 
 #if !defined(RX_REMOVE_CVREF_OVERRIDE)
-namespace rx::std_polyfill {
+namespace RX_NAMESPACE::std_polyfill {
 template <class T>
 using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
 } // namespace rx::std_polyfill
-#define RX_REMOVE_CVREF_T rx::std_polyfill::remove_cvref_t
+#define RX_REMOVE_CVREF_T RX_NAMESPACE::std_polyfill::remove_cvref_t
 #else
 #define RX_REMOVE_CVREF_T RX_REMOVE_CVREF_OVERRIDE
 #endif
@@ -222,10 +223,10 @@ template <class R>
 struct input_range_iterator {
     R range;
     template <class Arg>
-    [[nodiscard]] constexpr explicit input_range_iterator(Arg&& range) noexcept
+    constexpr explicit input_range_iterator(Arg&& range) noexcept
         : range(std::forward<Arg>(range)) {}
-    [[nodiscard]] constexpr input_range_iterator(input_range_iterator&&) noexcept = default;
-    [[nodiscard]] constexpr input_range_iterator(const input_range_iterator&) noexcept = default;
+    constexpr input_range_iterator(input_range_iterator&&) noexcept = default;
+    constexpr input_range_iterator(const input_range_iterator&) noexcept = default;
     constexpr input_range_iterator& operator=(input_range_iterator&&) noexcept = default;
     constexpr input_range_iterator& operator=(const input_range_iterator&) noexcept = default;
 
@@ -368,9 +369,9 @@ struct IteratorRange {
     EndIt end_;
 
     template <class C>
-    [[nodiscard]] constexpr explicit IteratorRange(const C& collection) noexcept
+    constexpr explicit IteratorRange(const C& collection) noexcept
         : current_(begin(collection)), end_(end(collection)) {}
-    [[nodiscard]] constexpr IteratorRange(It begin, EndIt end) noexcept
+    constexpr IteratorRange(It begin, EndIt end) noexcept
         : current_(begin), end_(end) {}
 
     constexpr void next() noexcept {
@@ -412,7 +413,7 @@ struct VectorRange {
     // Note: Moving a vector does not invalidate iterators.
     typename std::vector<T>::const_iterator current_;
 
-    [[nodiscard]] constexpr explicit VectorRange(std::vector<T> vec) noexcept
+    constexpr explicit VectorRange(std::vector<T> vec) noexcept
         : vector_(std::move(vec)), current_(vector_.begin()) {}
     constexpr VectorRange(VectorRange&&) noexcept = default;
     constexpr VectorRange(const VectorRange& other) noexcept
@@ -462,7 +463,7 @@ struct generate {
     using output_type = decltype(func());
     static constexpr bool is_finite = false;
     template <class T>
-    [[nodiscard]] constexpr explicit generate(T&& func) : func(std::forward<T>(func)) {}
+    constexpr explicit generate(T&& func) : func(std::forward<T>(func)) {}
 
     constexpr void next() noexcept {}
     [[nodiscard]] constexpr bool at_end() const noexcept { return false; }
@@ -488,7 +489,7 @@ struct seq {
     using output_type = T;
     static constexpr bool is_finite = false;
 
-    [[nodiscard]] constexpr explicit seq(T init = 0, T step = 1) : current(init), step(step) {}
+    constexpr explicit seq(T init = 0, T step = 1) : current(init), step(step) {}
 
     constexpr void next() { current += step; }
     [[nodiscard]] constexpr output_type get() const { return current; }
@@ -507,7 +508,7 @@ seq(T, T)->seq<T>;
 template <class T>
 struct fill {
     T value;
-    [[nodiscard]] constexpr explicit fill(T value) noexcept : value(std::move(value)) {}
+    constexpr explicit fill(T value) noexcept : value(std::move(value)) {}
 
     using output_type = T;
     static constexpr bool is_finite = false;
@@ -532,7 +533,7 @@ struct fill_n {
     T value;
     size_t n;
     size_t i = 0;
-    [[nodiscard]] constexpr explicit fill_n(size_t n, T value) : value(std::move(value)), n(n) {}
+    constexpr explicit fill_n(size_t n, T value) : value(std::move(value)), n(n) {}
 
     constexpr void next() { ++i; }
     [[nodiscard]] constexpr output_type get() const { return value; }
@@ -545,7 +546,7 @@ fill_n(size_t, T &&)->fill_n<T>;
 template <class F>
 struct transform {
     F func;
-    [[nodiscard]] explicit constexpr transform(F func) noexcept : func(std::move(func)) {}
+    explicit constexpr transform(F func) noexcept : func(std::move(func)) {}
 
     template <class InputRange>
     struct Range {
@@ -554,7 +555,7 @@ struct transform {
         using output_type = decltype(std::declval<const F&>()((input_.get())));
         static constexpr bool is_finite = InputRange::is_finite;
 
-        [[nodiscard]] constexpr Range(InputRange input, transform transform) noexcept
+        constexpr Range(InputRange input, transform transform) noexcept
             : input_(std::move(input)), transform_(std::move(transform)) {}
         constexpr void next() { input_.next(); }
         constexpr output_type get() const { return transform_.func(input_.get()); }
@@ -589,7 +590,7 @@ struct filter {
         using output_type = typename InputRange::output_type;
         static constexpr bool is_finite = InputRange::is_finite;
 
-        [[nodiscard]] constexpr Range(InputRange input, filter filter)
+        constexpr Range(InputRange input, filter filter)
             : input_(std::move(input)), filter_(std::move(filter)) {
             while (!input_.at_end() && !filter_.pred(input_.get())) {
                 input_.next();
@@ -624,7 +625,7 @@ filter(F &&)->filter<RX_REMOVE_CVREF_T<F>>;
 */
 struct first_n {
     size_t n;
-    [[nodiscard]] constexpr explicit first_n(size_t n) noexcept : n(n) {}
+    constexpr explicit first_n(size_t n) noexcept : n(n) {}
 
     template <class InputRange>
     struct Range {
@@ -634,7 +635,7 @@ struct first_n {
         using output_type = typename InputRange::output_type;
         static constexpr bool is_finite = true;
 
-        [[nodiscard]] constexpr Range(InputRange input, size_t n) noexcept
+        constexpr Range(InputRange input, size_t n) noexcept
             : input_(std::move(input)), n(n) {}
         [[nodiscard]] constexpr output_type get() const noexcept { return input_.get(); }
         constexpr void next() noexcept {
@@ -657,7 +658,7 @@ struct first_n {
 */
 struct skip_n {
     size_t n;
-    [[nodiscard]] constexpr explicit skip_n(size_t n) noexcept : n(n) {}
+    constexpr explicit skip_n(size_t n) noexcept : n(n) {}
 
     template <class InputRange>
     struct Range {
@@ -667,7 +668,7 @@ struct skip_n {
         using output_type = typename InputRange::output_type;
         static constexpr bool is_finite = InputRange::is_finite;
 
-        [[nodiscard]] constexpr Range(InputRange input, size_t n) noexcept
+        constexpr Range(InputRange input, size_t n) noexcept
             : input_(std::move(input)), n_(n) {
             while (!input_.at_end() && i_ < n_) {
                 input_.next();
@@ -700,7 +701,7 @@ template <class P>
 struct until {
     P pred;
     template <class T>
-    [[nodiscard]] constexpr explicit until(T&& pred) : pred(std::forward<T>(pred)) {}
+    constexpr explicit until(T&& pred) : pred(std::forward<T>(pred)) {}
 
     template <class InputRange>
     struct Range {
@@ -713,7 +714,7 @@ struct until {
         using storage_t = RX_REMOVE_CVREF_T<typename InputRange::output_type>;
         storage_t storage;
 
-        [[nodiscard]] constexpr Range(InputRange input, P pred) noexcept
+        constexpr Range(InputRange input, P pred) noexcept
             : input(std::move(input)), pred(std::move(pred)), end(input.at_end()) {
             if (!end) {
                 storage = input.get();
@@ -755,7 +756,7 @@ struct ZipRange {
     static constexpr bool is_finite = (false || ... || Inputs::is_finite);
 
     template <class... Args>
-    [[nodiscard]] constexpr explicit ZipRange(Args&&... args)
+    constexpr explicit ZipRange(Args&&... args)
         : inputs(std::make_tuple(std::forward<Args>(args)...)) {}
 
     [[nodiscard]] constexpr output_type get() const noexcept {
@@ -796,7 +797,7 @@ template <class... Inputs>
 
     If the input produces 1 or more output, the last element produced will be placed in the result.
 
-    If the input produces 0 outputs, the result will be util::none.
+    If the input produces 0 outputs, the result will be nullopt.
 */
 struct to_opt {
     template <class R>
@@ -975,7 +976,7 @@ struct any_of {
     P pred;
 
     template <class T>
-    [[nodiscard]] constexpr explicit any_of(T&& pred) : pred(std::forward<T>(pred)) {}
+    constexpr explicit any_of(T&& pred) : pred(std::forward<T>(pred)) {}
 
     template <class R>
     [[nodiscard]] constexpr bool operator()(R&& range) const {
@@ -1003,7 +1004,7 @@ struct all_of {
     P pred;
 
     template <class T>
-    [[nodiscard]] constexpr explicit all_of(T&& pred) : pred(std::forward<T>(pred)) {}
+    constexpr explicit all_of(T&& pred) : pred(std::forward<T>(pred)) {}
 
     template <class R>
     [[nodiscard]] constexpr bool operator()(R&& range) {
@@ -1030,7 +1031,7 @@ template <class P>
 struct none_of {
     P pred;
     template <class T>
-    [[nodiscard]] constexpr explicit none_of(T&& pred) : pred(std::forward<T>(pred)) {}
+    constexpr explicit none_of(T&& pred) : pred(std::forward<T>(pred)) {}
 
     template <class R>
     [[nodiscard]] constexpr bool operator()(R&& range) {
@@ -1054,7 +1055,7 @@ none_of(P &&)->none_of<P>;
 template <class C>
 struct append {
     C& out;
-    [[nodiscard]] constexpr explicit append(C& out) : out(out) {}
+    constexpr explicit append(C& out) : out(out) {}
 
     template <class R>
     constexpr C& operator()(R&& range) {
@@ -1078,12 +1079,12 @@ struct sort {
         using output_type = typename InputRange::output_type;
         InputRange input;
         Compare cmp;
-        [[nodiscard]] constexpr Range(InputRange input, Compare cmp)
+        constexpr Range(InputRange input, Compare cmp)
             : input(std::move(input)), cmp(std::move(cmp)) {}
 
         template <class Out>
             constexpr void sink(Out& out) && noexcept {
-            using util::sink; // enable ADL
+            using RX_NAMESPACE::sink; // enable ADL
             sink(std::move(input), out);
             std::sort(begin(out), end(out), cmp);
         }
@@ -1122,12 +1123,12 @@ struct uniq {
         using output_type = typename InputRange::output_type;
         InputRange input;
         Compare cmp;
-        [[nodiscard]] constexpr Range(InputRange input, Compare cmp) noexcept
+        constexpr Range(InputRange input, Compare cmp) noexcept
             : input(std::move(input)), cmp(std::move(cmp)) {}
 
         template <class Out>
             constexpr void sink(Out& out) && noexcept {
-            using util::sink; // enable ADL
+            using RX_NAMESPACE::sink; // enable ADL
             sink(std::move(input), out);
             auto remove_from = std::unique(begin(out), end(out), cmp);
             out.erase(remove_from, end(out));
