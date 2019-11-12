@@ -758,15 +758,14 @@ until(P &&)->until<RX_REMOVE_CVREF_T<P>>;
 template <class... Inputs>
 struct ZipRange {
     std::tuple<Inputs...> inputs;
-    using output_type = std::tuple<typename Inputs::output_type...>;
+    using output_type = std::tuple<RX_REMOVE_CVREF_T<typename Inputs::output_type>...>;
     static constexpr bool is_finite = (false || ... || Inputs::is_finite);
 
-    template <class... Args>
-    constexpr explicit ZipRange(Args&&... args)
-        : inputs(std::forward<Args>(args)...) {}
+    constexpr explicit ZipRange(Inputs... args)
+        : inputs(std::move(args)...) {}
 
     [[nodiscard]] constexpr output_type get() const noexcept {
-        return std::tuple(std::get<Inputs>(inputs).get()...);
+        return output_type(std::get<Inputs>(inputs).get()...);
     }
 
     constexpr void next() noexcept {
@@ -795,8 +794,7 @@ ZipRange(Inputs&&...)->ZipRange<RX_REMOVE_CVREF_T<Inputs>...>;
 */
 template <class... Inputs>
 [[nodiscard]] constexpr auto zip(Inputs&&... inputs) noexcept {
-    // Constructor deduction guides seem buggy on GCC 9.1.
-    return ZipRange<RX_REMOVE_CVREF_T<Inputs>...>(std::forward<Inputs>(inputs)...);
+    return ZipRange(as_input_range(std::forward<Inputs>(inputs))...);
 }
 
 /*!

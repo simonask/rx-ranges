@@ -253,6 +253,21 @@ TEST_CASE("ranges infinity propagates") {
     CHECK(!decltype(s)::is_finite);
 }
 
+TEST_CASE("ranges enumerate with indices") {
+    auto input = std::vector {{ "a"s, "b"s, "c"s }};
+    for (auto pair: zip(input, seq())) {
+        if (std::get<0>(pair) == "a") {
+            CHECK(std::get<1>(pair) == 0);
+        } else if (std::get<0>(pair) == "b") {
+            CHECK(std::get<1>(pair) == 1);
+        } else if (std::get<0>(pair) == "c") {
+            CHECK(std::get<1>(pair) == 2);
+        } else {
+            CHECK(false);
+        }
+    }
+}
+
 /*
 TEST_CASE("ranges append to non-container [no compile]") {
     double not_a_container = 0;
