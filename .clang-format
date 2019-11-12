@@ -1,0 +1,96 @@
+---
+Language:        Cpp
+Standard:        Cpp11
+ColumnLimit:     100
+DisableFormat:   false
+FixNamespaceComments: true
+
+# Indentation
+IndentWidth:     4
+AccessModifierOffset: -4
+ContinuationIndentWidth: 4
+IndentCaseLabels: true
+IndentWrappedFunctionNames: false
+ConstructorInitializerIndentWidth: 4
+NamespaceIndentation: Inner
+TabWidth:        4
+UseTab:          Never
+
+# Spacing
+Cpp11BracedListStyle: true
+DerivePointerAlignment: false
+KeepEmptyLinesAtTheStartOfBlocks: true
+MaxEmptyLinesToKeep: 2
+SpaceAfterCStyleCast: false
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeParens: ControlStatements
+SpaceBeforeCpp11BracedList: false
+SpaceInEmptyParentheses: false
+SpacesBeforeTrailingComments: 1
+SpacesInAngles:  false
+SpacesInContainerLiterals: true
+SpacesInCStyleCastParentheses: false
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+
+# Alignment
+AlignAfterOpenBracket: AlwaysBreak
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignEscapedNewlines: DontAlign
+AlignOperands:   true
+AlignTrailingComments: true
+AllowAllParametersOfDeclarationOnNextLine: false
+# AllowAllArgumentsOnNextLine: false
+# AllowAllConstructorInitializersOnNextLine: true
+PointerAlignment: Left
+
+# Line breaks
+AllowShortBlocksOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+# AllowShortLambdasOnASingleLine: Inline
+AlwaysBreakAfterDefinitionReturnType: None
+AlwaysBreakAfterReturnType: None
+AlwaysBreakBeforeMultilineStrings: true
+AlwaysBreakTemplateDeclarations: true
+BinPackArguments: false
+BinPackParameters: false
+BraceWrapping:
+  AfterClass:      false
+  AfterControlStatement: false
+  AfterEnum:       false
+  AfterFunction:   false
+  AfterNamespace:  false
+  AfterObjCDeclaration: false
+  AfterStruct:     false
+  AfterUnion:      false
+  BeforeCatch:     true
+  BeforeElse:      false
+  IndentBraces:    false
+BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeBraces: Custom
+BreakBeforeTernaryOperators: true
+BreakConstructorInitializers: BeforeComma
+BreakInheritanceList: BeforeComma
+ConstructorInitializerAllOnOneLineOrOnePerLine: true
+ExperimentalAutoDetectBinPacking: false
+PenaltyBreakBeforeFirstCallParameter:  100
+PenaltyBreakComment: 300
+PenaltyBreakFirstLessLess: 120
+PenaltyBreakString: 1000
+PenaltyExcessCharacter: 1000000
+PenaltyReturnTypeOnItsOwnLine: 60
+# PenaltyBreakAssignment: 0
+
+# Comments
+CommentPragmas:  '^[@\\].+'  # Don't reflow Doxygen comments
+ReflowComments:  true
+
+ForEachMacros:   [ foreach, Q_FOREACH, BOOST_FOREACH ]
+
+MacroBlockBegin: ''
+MacroBlockEnd:   ''
+...
