@@ -100,6 +100,8 @@ following observations:
 ## TODO
 
 - Custom comparison functions for `sort()`, `uniq()`, `min()`, `max()`, etc.
+- More algorithms (`reverse()`, `assign()`, etc.).
+- Subranges: Grouping, partitioning, etc.
 
 ## Examples
 
