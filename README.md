@@ -43,7 +43,7 @@ Other than usability concerns, these are the main differences from C++20 ranges.
 - Internally using iterators. The internal iteration objects are modeled with an "enumerator"
   concept instead (objects that provide `next()`, `get()`, `at_end()`, etc.), which simplifies
   custom extensions. Implicit, zero-overhead conversion to iterators is provided for
-  compatibility with standard algorithms and the range-based for loop syntax. 
+  compatibility with standard algorithms and the range-based for loop syntax.
 - Direct access to the data of underlying contiguous ranges (`data()` etc.).
 
 ## Compact generated code
@@ -99,8 +99,8 @@ following observations:
 
 ## TODO
 
-- Custom comparison functions for `sort()`, `uniq()`, `min()`, `max()`, etc.
-- More algorithms (`reverse()`, `assign()`, etc.).
+- Custom comparison functions for `min()`, `max()`, etc.
+- More algorithms (`assign()`, etc.).
 - Subranges: Grouping, partitioning, etc.
 
 ## Examples
@@ -113,7 +113,7 @@ for (auto x: seq() | filter([](int x) { return x % 2 == 1; }) | first_n(15)) {
 }
 ~~~
 
-Generate a map of 15 integers to their string representation:
+Generate a map of 15 integers to their string representation.
 
 ~~~c++
 // Note: Composing two infinite ranges.
@@ -122,7 +122,8 @@ auto strings = ints | transform([](int x) { return std::to_string(x); });
 auto map = zip(ints, strings) | first_n(15) | to_map();
 ~~~
 
-Sort a list of integers converted to strings:
+Sort a list of integers converted to strings. Note that sorting happens in the
+resulting output vector. No additional storage is
 
 ~~~c++
 auto ints = std::vector{{4, 1, 6, 2, 7, 4}};

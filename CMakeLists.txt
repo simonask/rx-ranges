@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.6)
 cmake_policy(SET CMP0076 NEW)
-project(rx-ranges VERSION 1.0.0)
+project(rx-ranges VERSION 1.0.1)
 
 option(RX_TEST ON)
 
