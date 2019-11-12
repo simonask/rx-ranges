@@ -1,8 +1,9 @@
 #include <rx/ranges.hpp>
 
 #include <algorithm>
-#include <unordered_map>
 #include <string>
+#include <unordered_map>
+
 
 #include <doctest/doctest.h>
 
@@ -21,14 +22,14 @@ TEST_CASE("range operator|") {
 }
 
 TEST_CASE("range transform") {
-    auto input = std::vector { { 1, 2, 3, 4 } };
+    auto input = std::vector{{1, 2, 3, 4}};
     auto strings = input | transform(&to_string<int>) | to_vector();
-    auto expected = std::vector { { "1"s, "2"s, "3"s, "4"s } };
+    auto expected = std::vector{{"1"s, "2"s, "3"s, "4"s}};
     CHECK(strings == expected);
 }
 
 TEST_CASE("range transform reentrant") {
-    auto input = std::vector { { 1, 2, 3, 4 } };
+    auto input = std::vector{{1, 2, 3, 4}};
     auto strings = input | transform(&to_string<int>);
     auto a = strings | to_vector();
     auto b = strings | to_vector();
@@ -36,7 +37,7 @@ TEST_CASE("range transform reentrant") {
 }
 
 TEST_CASE("range filter") {
-    auto input = std::list { { 1, 2, 3, 4 } };
+    auto input = std::list{{1, 2, 3, 4}};
     auto odd = input | filter([](int x) { return x % 2 == 1; }) | to_list();
     for (auto x : odd) {
         CHECK(x % 2 == 1);
@@ -44,7 +45,7 @@ TEST_CASE("range filter") {
 }
 
 TEST_CASE("range filter reentrant") {
-    auto input = std::list { { 1, 2, 3, 4 } };
+    auto input = std::list{{1, 2, 3, 4}};
     auto odd = input | filter([](int x) { return x % 2 == 1; });
     auto a = odd | to_vector();
     auto b = odd | to_vector();
@@ -52,7 +53,7 @@ TEST_CASE("range filter reentrant") {
 }
 
 TEST_CASE("range first") {
-    auto input = std::vector { { "Hello"s, "World"s, "Morty"s } };
+    auto input = std::vector{{"Hello"s, "World"s, "Morty"s}};
     auto contains_y = [](std::string_view sv) { return sv.find('y') != std::string::npos; };
     RX_OPTIONAL morty = input | filter(contains_y) | first();
     CHECK(morty);
@@ -60,7 +61,7 @@ TEST_CASE("range first") {
 }
 
 TEST_CASE("range first reentrant") {
-    auto input = std::vector { { "Hello"s, "World"s, "Morty"s } };
+    auto input = std::vector{{"Hello"s, "World"s, "Morty"s}};
     auto contains_y = [](std::string_view sv) { return sv.find('y') != std::string::npos; };
     auto range = input | filter(contains_y);
     auto a = range | first();
@@ -69,14 +70,14 @@ TEST_CASE("range first reentrant") {
 }
 
 TEST_CASE("range first_n") {
-    auto input = std::vector { { 1, 2, 3, 4, 5 } };
+    auto input = std::vector{{1, 2, 3, 4, 5}};
     auto first_3 = input | first_n(3) | to_vector();
     CHECK(first_3.size() == 3);
-    CHECK(first_3 == std::vector { { 1, 2, 3 } });
+    CHECK(first_3 == std::vector{{1, 2, 3}});
 }
 
 TEST_CASE("range first_n reentrant") {
-    auto input = std::vector { { 1, 2, 3, 4, 5 } };
+    auto input = std::vector{{1, 2, 3, 4, 5}};
     auto first_3 = input | first_n(3);
     auto a = first_3 | to_vector();
     auto b = first_3 | to_vector();
@@ -95,9 +96,12 @@ TEST_CASE("ranges zip") {
     auto input3 = seq(10); // inifinite range!
     auto zipped = zip(input1, input2, input3) | to_vector();
     CHECK(zipped.size() == 5);
-    auto expected = std::vector {
-        std::make_tuple(0, "0"s, 10), std::make_tuple(1, "1"s, 11), std::make_tuple(2, "2"s, 12),
-        std::make_tuple(3, "3"s, 13), std::make_tuple(4, "4"s, 14),
+    auto expected = std::vector{
+        std::make_tuple(0, "0"s, 10),
+        std::make_tuple(1, "1"s, 11),
+        std::make_tuple(2, "2"s, 12),
+        std::make_tuple(3, "3"s, 13),
+        std::make_tuple(4, "4"s, 14),
     };
     CHECK(zipped == expected);
 }
@@ -117,21 +121,21 @@ TEST_CASE("ranges to_map") {
     auto input2 = input1 | transform(&to_string<int>) | first_n(5);
     auto result = zip(input1, input2) | to_map();
     CHECK(result.size() == 5);
-    auto expected = std::map { {
+    auto expected = std::map{{
         std::make_pair(0, "0"s),
         std::make_pair(1, "1"s),
         std::make_pair(2, "2"s),
         std::make_pair(3, "3"s),
         std::make_pair(4, "4"s),
-    } };
+    }};
     CHECK(result == expected);
 }
 
 TEST_CASE("ranges to_set") {
-    auto input = std::vector { { 0, 0, 1, 1 } };
+    auto input = std::vector{{0, 0, 1, 1}};
     auto result = as_input_range(input) | to_set();
     CHECK(result.size());
-    auto expected = std::set { { 0, 1 } };
+    auto expected = std::set{{0, 1}};
     CHECK(result == expected);
 }
 
@@ -140,13 +144,11 @@ TEST_CASE("ranges append to arbitrary container") {
     auto keys = seq();
     auto values = keys | transform(&to_string<int>);
     zip(keys, values) | first_n(5) | append(result);
-    auto expected = std::unordered_map {{
-        std::make_pair(0.0, "0"s),
-        std::make_pair(1.0, "1"s),
-        std::make_pair(2.0, "2"s),
-        std::make_pair(3.0, "3"s),
-        std::make_pair(4.0, "4"s)
-    }};
+    auto expected = std::unordered_map{{std::make_pair(0.0, "0"s),
+                                        std::make_pair(1.0, "1"s),
+                                        std::make_pair(2.0, "2"s),
+                                        std::make_pair(3.0, "3"s),
+                                        std::make_pair(4.0, "4"s)}};
     CHECK(result == expected);
 }
 
@@ -161,10 +163,12 @@ TEST_CASE("ranges generate") {
 TEST_CASE("ranges generate reentrant") {
     struct callable {
         int x = 0;
-        int operator()() noexcept { return x++; }
+        int operator()() noexcept {
+            return x++;
+        }
     };
     // Check that the generator function is copied when sinking into a range.
-    auto input = generate(callable {}) | first_n(5);
+    auto input = generate(callable{}) | first_n(5);
     auto a = input | to_vector();
     auto b = input | to_vector();
     CHECK(a == b);
@@ -202,10 +206,8 @@ TEST_CASE("ranges none_of") {
 }
 
 TEST_CASE("ranges avoid copy") {
-    auto input = std::vector {{ 1, 2, 3, 4 }};
-    auto odd = input | filter([](int x) {
-        return x % 2 == 1;
-    });
+    auto input = std::vector{{1, 2, 3, 4}};
+    auto odd = input | filter([](int x) { return x % 2 == 1; });
     // modify the input to check that filtered range is not actually operating on a copy of the
     // vector. Note: filter() skips non-matching elements initially, which is a bit awkward.
     input[2] = 0;
@@ -249,13 +251,14 @@ TEST_CASE("ranges min") {
 }
 
 TEST_CASE("ranges infinity propagates") {
-    auto s = seq() | skip_n(1) | filter([](auto) { return true; }) | transform([](auto) { return 0; });
+    auto s =
+        seq() | skip_n(1) | filter([](auto) { return true; }) | transform([](auto) { return 0; });
     CHECK(!decltype(s)::is_finite);
 }
 
 TEST_CASE("ranges enumerate with indices") {
-    auto input = std::vector {{ "a"s, "b"s, "c"s }};
-    for (auto pair: zip(input, seq())) {
+    auto input = std::vector{{"a"s, "b"s, "c"s}};
+    for (auto pair : zip(input, seq())) {
         if (std::get<0>(pair) == "a") {
             CHECK(std::get<1>(pair) == 0);
         } else if (std::get<0>(pair) == "b") {
@@ -273,9 +276,9 @@ TEST_CASE("ranges enumerate with indices") {
 }
 
 TEST_CASE("ranges reverse") {
-    auto input = std::vector {{ 2, 3, 6, 1, 7, 8, 3, 4 }};
+    auto input = std::vector{{2, 3, 6, 1, 7, 8, 3, 4}};
     auto result = input | sort() | reverse() | to_vector();
-    auto expected = std::vector {{ 8, 7, 6, 4, 3, 3, 2, 1 }};
+    auto expected = std::vector{{8, 7, 6, 4, 3, 3, 2, 1}};
     CHECK(result == expected);
 }
 
