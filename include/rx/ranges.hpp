@@ -1,12 +1,13 @@
 #ifndef RX_RANGES_HPP_INCLUDED
 #define RX_RANGES_HPP_INCLUDED
 
+#include <algorithm>
 #include <list>
 #include <map>
 #include <set>
-#include <vector>
 #include <type_traits>
-#include <algorithm>
+#include <vector>
+
 
 #if !defined(RX_NAMESPACE_OVERRIDE)
 #define RX_NAMESPACE rx
@@ -38,7 +39,7 @@
 namespace RX_NAMESPACE::std_polyfill {
 template <class T>
 using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
-} // namespace rx::std_polyfill
+} // namespace RX_NAMESPACE::std_polyfill
 #define RX_REMOVE_CVREF_T RX_NAMESPACE::std_polyfill::remove_cvref_t
 #else
 #define RX_REMOVE_CVREF_T RX_REMOVE_CVREF_OVERRIDE
@@ -46,7 +47,6 @@ using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
 
 
 namespace RX_NAMESPACE {
-
 
 
 /*!
@@ -230,8 +230,12 @@ struct input_range_iterator {
     constexpr input_range_iterator& operator=(input_range_iterator&&) noexcept = default;
     constexpr input_range_iterator& operator=(const input_range_iterator&) noexcept = default;
 
-    constexpr bool operator==(input_range_iterator_end) const { return range.at_end(); }
-    constexpr bool operator!=(input_range_iterator_end) const { return !range.at_end(); }
+    constexpr bool operator==(input_range_iterator_end) const {
+        return range.at_end();
+    }
+    constexpr bool operator!=(input_range_iterator_end) const {
+        return !range.at_end();
+    }
 
     constexpr auto& operator++() noexcept {
         RX_ASSERT(!range.at_end());
@@ -239,8 +243,12 @@ struct input_range_iterator {
         return *this;
     }
 
-    [[nodiscard]] constexpr decltype(auto) operator*() const noexcept { return range.get(); }
-    [[nodiscard]] constexpr auto operator-> () const noexcept { return &range.get(); }
+    [[nodiscard]] constexpr decltype(auto) operator*() const noexcept {
+        return range.get();
+    }
+    [[nodiscard]] constexpr auto operator-> () const noexcept {
+        return &range.get();
+    }
 };
 template <class R>
 input_range_iterator(R &&)->input_range_iterator<RX_REMOVE_CVREF_T<R>>;
@@ -248,18 +256,18 @@ input_range_iterator(R &&)->input_range_iterator<RX_REMOVE_CVREF_T<R>>;
 template <class R>
 [[nodiscard]] constexpr auto
 begin(R&& range, std::enable_if_t<is_input_range_v<RX_REMOVE_CVREF_T<R>>>* = nullptr) noexcept {
-    return input_range_iterator { as_input_range(std::forward<R>(range)) };
+    return input_range_iterator{as_input_range(std::forward<R>(range))};
 }
 template <class R>
 [[nodiscard]] constexpr auto
 end(const R&, std::enable_if_t<is_input_range_v<R>>* = nullptr) noexcept {
-    return input_range_iterator_end {};
+    return input_range_iterator_end{};
 }
 
 namespace detail {
     template <class T>
     struct invalid_type {};
-}
+} // namespace detail
 
 /// Copy elements from an rvalue InputRange to output.
 ///
@@ -310,7 +318,8 @@ constexpr void sink(
         }
         // else if constexpr (!std::is_same_v<Out, detail::invalid_type<output_type>>) {
         //     static_assert(
-        //         std::is_same_v<Out, detail::invalid_type<output_type>>, "Output supports neither emplace_back(), push_back(), nor emplace().");
+        //         std::is_same_v<Out, detail::invalid_type<output_type>>, "Output supports neither
+        //         emplace_back(), push_back(), nor emplace().");
         // }
 
         in.next();
@@ -377,16 +386,19 @@ struct IteratorRange {
     template <class C>
     constexpr explicit IteratorRange(const C& collection) noexcept
         : current_(begin(collection)), end_(end(collection)) {}
-    constexpr IteratorRange(It begin, EndIt end) noexcept
-        : current_(begin), end_(end) {}
+    constexpr IteratorRange(It begin, EndIt end) noexcept : current_(begin), end_(end) {}
 
     constexpr void next() noexcept {
         RX_ASSERT(current_ != end_);
         ++current_;
     }
 
-    [[nodiscard]] constexpr output_type get() const noexcept { return *current_; }
-    [[nodiscard]] constexpr bool at_end() const noexcept { return current_ == end_; }
+    [[nodiscard]] constexpr output_type get() const noexcept {
+        return *current_;
+    }
+    [[nodiscard]] constexpr bool at_end() const noexcept {
+        return current_ == end_;
+    }
     constexpr size_t size_hint() const noexcept {
         if constexpr (std::is_same_v<It, EndIt> && is_random_access_iterator_v<It>) {
             return end_ - current_;
@@ -403,12 +415,12 @@ template <class C>
 [[nodiscard]] constexpr auto as_input_range(
     const C& collection,
     std::void_t<decltype(collection.begin()), decltype(collection.end())>* = nullptr) noexcept {
-    return IteratorRange { collection };
+    return IteratorRange{collection};
 }
 
 template <size_t N, class T>
 [[nodiscard]] constexpr auto as_input_range(T (&collection)[N]) noexcept {
-    return IteratorRange { std::begin(collection), std::end(collection) };
+    return IteratorRange{std::begin(collection), std::end(collection)};
 }
 
 template <class T>
@@ -434,9 +446,15 @@ struct VectorRange {
         RX_ASSERT(current_ != vector_.end());
         ++current_;
     }
-    constexpr output_type get() const noexcept { return *current_; }
-    constexpr bool at_end() const noexcept { return current_ == vector_.end(); }
-    constexpr size_t size_hint() const noexcept { return vector_.size(); }
+    constexpr output_type get() const noexcept {
+        return *current_;
+    }
+    constexpr bool at_end() const noexcept {
+        return current_ == vector_.end();
+    }
+    constexpr size_t size_hint() const noexcept {
+        return vector_.size();
+    }
 };
 
 /// Convert Sink to InputRange by copying elements into temporary storage.
@@ -450,7 +468,7 @@ template <
     using output_type = RX_REMOVE_CVREF_T<typename RX_REMOVE_CVREF_T<R>::output_type>;
     std::vector<output_type> vec;
     sink(std::move(range), vec);
-    return VectorRange<output_type> { std::move(vec) };
+    return VectorRange<output_type>{std::move(vec)};
 }
 
 /*!
@@ -458,7 +476,7 @@ template <
 
     Produces an infinite number of outputs, calling F to produce each output.
 
-    Combine with things like \a first_n or \a until to create a finite range.
+    Combine with things like \a take or \a until to create a finite range.
 
     @tparam F A function that will be invoked to produce an output.
 */
@@ -472,9 +490,15 @@ struct generate {
     constexpr explicit generate(T&& func) : func(std::forward<T>(func)) {}
 
     constexpr void next() noexcept {}
-    [[nodiscard]] constexpr bool at_end() const noexcept { return false; }
-    [[nodiscard]] constexpr output_type get() const { return func(); }
-    constexpr size_t size_hint() const noexcept { return 0; }
+    [[nodiscard]] constexpr bool at_end() const noexcept {
+        return false;
+    }
+    [[nodiscard]] constexpr output_type get() const {
+        return func();
+    }
+    constexpr size_t size_hint() const noexcept {
+        return 0;
+    }
 };
 template <class F>
 generate(F &&)->generate<RX_REMOVE_CVREF_T<F>>;
@@ -497,10 +521,18 @@ struct seq {
 
     constexpr explicit seq(T init = 0, T step = 1) : current(init), step(step) {}
 
-    constexpr void next() { current += step; }
-    [[nodiscard]] constexpr output_type get() const { return current; }
-    [[nodiscard]] constexpr bool at_end() const noexcept { return false; }
-    constexpr size_t size_hint() const noexcept { return 0; }
+    constexpr void next() {
+        current += step;
+    }
+    [[nodiscard]] constexpr output_type get() const {
+        return current;
+    }
+    [[nodiscard]] constexpr bool at_end() const noexcept {
+        return false;
+    }
+    constexpr size_t size_hint() const noexcept {
+        return 0;
+    }
 };
 seq()->seq<int>;
 template <class T>
@@ -512,42 +544,66 @@ seq(T, T)->seq<T>;
     @brief Generate infinite copies of type T.
 */
 template <class T>
-struct fill {
+struct repeat {
     T value;
-    constexpr explicit fill(T value) noexcept : value(std::move(value)) {}
+    constexpr explicit repeat(T value) noexcept : value(std::move(value)) {}
 
     using output_type = T;
     static constexpr bool is_finite = false;
     constexpr void next() {}
-    [[nodiscard]] constexpr output_type get() const { return value; }
-    [[nodiscard]] constexpr bool at_end() const noexcept { return false; }
-    constexpr size_t size_hint() const noexcept { return 0; }
+    [[nodiscard]] constexpr output_type get() const {
+        return value;
+    }
+    [[nodiscard]] constexpr bool at_end() const noexcept {
+        return false;
+    }
+    constexpr size_t size_hint() const noexcept {
+        return 0;
+    }
 };
 template <class T>
-fill(T &&)->fill<T>;
+repeat(T &&)->repeat<T>;
+
+template <class T>
+[[nodiscard]] constexpr auto fill(T&& v) {
+    return repeat(std::forward<T>(v));
+}
 
 /*!
     @brief Generate N copies of type T.
 
-    This is equivalent to `fill(value) | first_n(n)`.
+    This is equivalent to `fill(value) | take(n)`.
 */
 template <class T>
-struct fill_n {
+struct repeat_n {
     using output_type = T;
     static constexpr bool is_finite = true;
 
     T value;
     size_t n;
     size_t i = 0;
-    constexpr explicit fill_n(size_t n, T value) : value(std::move(value)), n(n) {}
+    constexpr explicit repeat_n(size_t n, T value) : value(std::move(value)), n(n) {}
 
-    constexpr void next() { ++i; }
-    [[nodiscard]] constexpr output_type get() const { return value; }
-    [[nodiscard]] constexpr bool at_end() const { return i == n; }
-    constexpr size_t size_hint() const noexcept { return n; }
+    constexpr void next() {
+        ++i;
+    }
+    [[nodiscard]] constexpr output_type get() const {
+        return value;
+    }
+    [[nodiscard]] constexpr bool at_end() const {
+        return i == n;
+    }
+    constexpr size_t size_hint() const noexcept {
+        return n;
+    }
 };
 template <class T>
-fill_n(size_t, T &&)->fill_n<T>;
+repeat_n(size_t, T &&)->repeat_n<T>;
+
+template <class T>
+[[nodiscard]] constexpr auto fill_n(size_t n, T&& v) {
+    return repeat_n(n, std::forward<T>(v));
+}
 
 template <class F>
 struct transform {
@@ -563,21 +619,29 @@ struct transform {
 
         constexpr Range(InputRange input, transform transform) noexcept
             : input_(std::move(input)), transform_(std::move(transform)) {}
-        constexpr void next() { input_.next(); }
-        constexpr output_type get() const { return transform_.func(input_.get()); }
-        constexpr bool at_end() const { return input_.at_end(); }
-        constexpr size_t size_hint() const noexcept { return input_.size_hint(); }
+        constexpr void next() {
+            input_.next();
+        }
+        constexpr output_type get() const {
+            return transform_.func(input_.get());
+        }
+        constexpr bool at_end() const {
+            return input_.at_end();
+        }
+        constexpr size_t size_hint() const noexcept {
+            return input_.size_hint();
+        }
     };
 
     template <class InputRange>
     [[nodiscard]] constexpr auto operator()(InputRange&& input) const& noexcept {
         using Inner = RX_REMOVE_CVREF_T<decltype(as_input_range(std::forward<InputRange>(input)))>;
-        return Range<Inner> { as_input_range(std::forward<InputRange>(input)), *this };
+        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), *this};
     }
     template <class InputRange>
         [[nodiscard]] constexpr auto operator()(InputRange&& input) && noexcept {
         using Inner = RX_REMOVE_CVREF_T<decltype(as_input_range(std::forward<InputRange>(input)))>;
-        return Range<Inner> { as_input_range(std::forward<InputRange>(input)), std::move(*this) };
+        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), std::move(*this)};
     }
 };
 template <class F>
@@ -602,36 +666,42 @@ struct filter {
                 input_.next();
             }
         }
-        [[nodiscard]] constexpr output_type get() const noexcept { return input_.get(); }
+        [[nodiscard]] constexpr output_type get() const noexcept {
+            return input_.get();
+        }
         constexpr void next() noexcept {
             do {
                 input_.next();
             } while (!input_.at_end() && !filter_.pred(input_.get()));
         }
-        [[nodiscard]] constexpr bool at_end() const noexcept { return input_.at_end(); }
-        [[nodiscard]] constexpr size_t size_hint() const noexcept { return input_.size_hint(); }
+        [[nodiscard]] constexpr bool at_end() const noexcept {
+            return input_.at_end();
+        }
+        [[nodiscard]] constexpr size_t size_hint() const noexcept {
+            return input_.size_hint();
+        }
     };
 
     template <class InputRange>
     [[nodiscard]] constexpr auto operator()(InputRange&& input) const& {
         using Inner = RX_REMOVE_CVREF_T<decltype(as_input_range(std::forward<InputRange>(input)))>;
-        return Range<Inner> { as_input_range(std::forward<InputRange>(input)), *this };
+        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), *this};
     }
     template <class InputRange>
     [[nodiscard]] constexpr auto operator()(InputRange&& input) && {
         using Inner = RX_REMOVE_CVREF_T<decltype(as_input_range(std::forward<InputRange>(input)))>;
-        return Range<Inner> { as_input_range(std::forward<InputRange>(input)), std::move(*this) };
+        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), std::move(*this)};
     }
 };
 template <class F>
 filter(F &&)->filter<RX_REMOVE_CVREF_T<F>>;
 
 /*!
-    @brief Create a range that produces at most N elements.
+    @brief Create a range that produces at most N elements from the beginning of its input.
 */
-struct first_n {
+struct take {
     size_t n;
-    constexpr explicit first_n(size_t n) noexcept : n(n) {}
+    constexpr explicit take(size_t n) noexcept : n(n) {}
 
     template <class InputRange>
     struct Range {
@@ -641,23 +711,30 @@ struct first_n {
         using output_type = typename InputRange::output_type;
         static constexpr bool is_finite = true;
 
-        constexpr Range(InputRange input, size_t n) noexcept
-            : input_(std::move(input)), n(n) {}
-        [[nodiscard]] constexpr output_type get() const noexcept { return input_.get(); }
+        constexpr Range(InputRange input, size_t n) noexcept : input_(std::move(input)), n(n) {}
+        [[nodiscard]] constexpr output_type get() const noexcept {
+            return input_.get();
+        }
         constexpr void next() noexcept {
             RX_ASSERT(!input_.at_end());
             ++i;
             input_.next();
         }
-        [[nodiscard]] constexpr bool at_end() const noexcept { return i >= n || input_.at_end(); }
-        constexpr size_t size_hint() const noexcept { return n; }
+        [[nodiscard]] constexpr bool at_end() const noexcept {
+            return i >= n || input_.at_end();
+        }
+        constexpr size_t size_hint() const noexcept {
+            return n;
+        }
     };
     template <class InputRange>
     [[nodiscard]] constexpr auto operator()(InputRange&& input) const {
         using Inner = RX_REMOVE_CVREF_T<decltype(as_input_range(std::forward<InputRange>(input)))>;
-        return Range<Inner> { as_input_range(std::forward<InputRange>(input)), n };
+        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), n};
     }
 };
+
+using first_n = take;
 
 /*!
     @brief Create a range that skips the first N elements of its input.
@@ -674,22 +751,29 @@ struct skip_n {
         using output_type = typename InputRange::output_type;
         static constexpr bool is_finite = InputRange::is_finite;
 
-        constexpr Range(InputRange input, size_t n) noexcept
-            : input_(std::move(input)), n_(n) {
+        constexpr Range(InputRange input, size_t n) noexcept : input_(std::move(input)), n_(n) {
             while (!input_.at_end() && i_ < n_) {
                 input_.next();
                 ++i_;
             }
         }
-        [[nodiscard]] constexpr output_type get() const noexcept { return input_.get(); }
-        constexpr void next() noexcept { input_.next(); }
-        constexpr bool at_end() const noexcept { return input_.at_end(); }
-        constexpr size_t size_hint() const noexcept { return input_.size_hint(); }
+        [[nodiscard]] constexpr output_type get() const noexcept {
+            return input_.get();
+        }
+        constexpr void next() noexcept {
+            input_.next();
+        }
+        constexpr bool at_end() const noexcept {
+            return input_.at_end();
+        }
+        constexpr size_t size_hint() const noexcept {
+            return input_.size_hint();
+        }
     };
     template <class InputRange>
     [[nodiscard]] constexpr auto operator()(InputRange&& input) const {
         using Inner = RX_REMOVE_CVREF_T<decltype(as_input_range(std::forward<InputRange>(input)))>;
-        return Range<Inner> { as_input_range(std::forward<InputRange>(input)), n };
+        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), n};
     }
 };
 
@@ -742,14 +826,18 @@ struct until {
                 end = pred(storage);
             }
         }
-        [[nodiscard]] constexpr bool at_end() const noexcept { return end; }
-        constexpr size_t size_hint() const noexcept { return input.size_hint(); }
+        [[nodiscard]] constexpr bool at_end() const noexcept {
+            return end;
+        }
+        constexpr size_t size_hint() const noexcept {
+            return input.size_hint();
+        }
     };
 
     template <class InputRange>
     constexpr auto operator()(InputRange&& input) const {
         using Inner = RX_REMOVE_CVREF_T<decltype(as_input_range(std::forward<InputRange>(input)))>;
-        return Range<Inner> { as_input_range(std::forward<InputRange>(input)), pred };
+        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), pred};
     }
 };
 template <class P>
@@ -761,15 +849,14 @@ struct ZipRange {
     using output_type = std::tuple<RX_REMOVE_CVREF_T<typename Inputs::output_type>...>;
     static constexpr bool is_finite = (false || ... || Inputs::is_finite);
 
-    constexpr explicit ZipRange(Inputs... args)
-        : inputs(std::move(args)...) {}
+    constexpr explicit ZipRange(Inputs... args) : inputs(std::move(args)...) {}
 
     [[nodiscard]] constexpr output_type get() const noexcept {
         return output_type(std::get<Inputs>(inputs).get()...);
     }
 
     constexpr void next() noexcept {
-        int unused[] = { (std::get<Inputs>(inputs).next(), 0)..., 0 };
+        int unused[] = {(std::get<Inputs>(inputs).next(), 0)..., 0};
         static_cast<void>(unused);
     }
 
@@ -778,7 +865,7 @@ struct ZipRange {
     }
 
     constexpr size_t size_hint() const noexcept {
-        return std::max({ std::get<Inputs>(inputs).size_hint()... });
+        return std::max({std::get<Inputs>(inputs).size_hint()...});
     }
 };
 template <class... Inputs>
@@ -790,11 +877,24 @@ ZipRange(Inputs&&...)->ZipRange<RX_REMOVE_CVREF_T<Inputs>...>;
     Until none of the ranges are at end, produce a tuple of an element from each range.
 
     The ranges are not required to produce the same number of elements, but elements will only be
-    produced until one of the ranges is at the end.
+    produced until one of the ranges reaches its end.
 */
 template <class... Inputs>
 [[nodiscard]] constexpr auto zip(Inputs&&... inputs) noexcept {
     return ZipRange(as_input_range(std::forward<Inputs>(inputs))...);
+}
+
+/*!
+    @brief Enumerate elements of the input sequentially.
+
+    Equivalent to `zip(seq(), inputs...)`.
+
+    The inputs are not required to produce the same number of elements, but elements will only be
+    produced until one of the ranges reaches its end.
+*/
+template <class... Inputs>
+[[nodiscard]] constexpr auto enumerate(Inputs&&... inputs) noexcept {
+    return ZipRange(seq(), as_input_range(std::forward<Inputs>(inputs))...);
 }
 
 /*!
@@ -822,7 +922,7 @@ struct to_opt {
 struct first {
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& input) const {
-        return input | first_n(1) | to_opt();
+        return input | take(1) | to_opt();
     }
 };
 
@@ -907,7 +1007,8 @@ struct foldl {
     F func;
 
     template <class U, class E>
-    constexpr foldl(U&& init, E&& func) : init(std::forward<U>(init)), func(std::forward<E>(func)) {}
+    constexpr foldl(U&& init, E&& func)
+        : init(std::forward<U>(init)), func(std::forward<E>(func)) {}
 
     template <class InputRange>
     constexpr T operator()(InputRange&& input) {
@@ -930,7 +1031,8 @@ struct sum {
     [[nodiscard]] constexpr auto operator()(R&& input) noexcept {
         using type = RX_REMOVE_CVREF_T<typename RX_REMOVE_CVREF_T<R>::output_type>;
         return std::forward<R>(input)
-               | foldl(type {}, [](type accum, auto&& x) constexpr { return accum + x; });
+               | foldl(
+                   type{}, [](type accum, auto&& x) constexpr { return accum + x; });
     }
 };
 
@@ -939,13 +1041,14 @@ struct max {
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& input) noexcept {
         using type = RX_REMOVE_CVREF_T<typename RX_REMOVE_CVREF_T<R>::output_type>;
-        auto folder = foldl(RX_OPTIONAL<type>{}, [](auto&& accum, auto&& x) constexpr {
-            if (accum) {
-                return std::max(*accum, x);
-            } else {
-                return x;
-            }
-        });
+        auto folder = foldl(
+            RX_OPTIONAL<type>{}, [](auto&& accum, auto&& x) constexpr {
+                if (accum) {
+                    return std::max(*accum, x);
+                } else {
+                    return x;
+                }
+            });
         return std::move(folder)(std::forward<R>(input));
     }
 };
@@ -954,13 +1057,14 @@ struct min {
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& input) noexcept {
         using type = RX_REMOVE_CVREF_T<typename RX_REMOVE_CVREF_T<R>::output_type>;
-        auto folder = foldl(RX_OPTIONAL<type>{}, [](auto&& accum, auto&& x) constexpr {
-            if (accum) {
-                return std::min(*accum, x);
-            } else {
-                return x;
-            }
-        });
+        auto folder = foldl(
+            RX_OPTIONAL<type>{}, [](auto&& accum, auto&& x) constexpr {
+                if (accum) {
+                    return std::min(*accum, x);
+                } else {
+                    return x;
+                }
+            });
         return std::move(folder)(std::forward<R>(input));
     }
 };
@@ -1078,7 +1182,7 @@ using get_output_type_of_t =
 template <class Compare = std::less<void>>
 struct sort {
     Compare cmp;
-    constexpr explicit sort(Compare cmp = Compare {}) noexcept : cmp(std::move(cmp)) {}
+    constexpr explicit sort(Compare cmp = Compare{}) noexcept : cmp(std::move(cmp)) {}
 
     template <class InputRange>
     struct Range {
@@ -1099,13 +1203,13 @@ struct sort {
     template <class InputRange>
     [[nodiscard]] constexpr auto operator()(InputRange&& input) const& noexcept {
         using Inner = RX_REMOVE_CVREF_T<InputRange>;
-        return Range<Inner> { std::forward<InputRange>(input), cmp };
+        return Range<Inner>{std::forward<InputRange>(input), cmp};
     }
 
     template <class InputRange>
         [[nodiscard]] constexpr auto operator()(InputRange&& input) && noexcept {
         using Inner = RX_REMOVE_CVREF_T<InputRange>;
-        return Range<Inner> { std::forward<InputRange>(input), std::move(cmp) };
+        return Range<Inner>{std::forward<InputRange>(input), std::move(cmp)};
     }
 };
 template <class Compare>
@@ -1122,7 +1226,7 @@ sort()->sort<>;
 template <class Compare = std::equal_to<void>>
 struct uniq {
     Compare cmp;
-    constexpr explicit uniq(Compare cmp = Compare {}) noexcept : cmp(std::move(cmp)) {}
+    constexpr explicit uniq(Compare cmp = Compare{}) noexcept : cmp(std::move(cmp)) {}
 
     template <class InputRange>
     struct Range {
@@ -1144,13 +1248,13 @@ struct uniq {
     template <class InputRange>
     [[nodiscard]] constexpr auto operator()(InputRange&& input) const& noexcept {
         using Inner = RX_REMOVE_CVREF_T<InputRange>;
-        return Range<Inner> { std::forward<InputRange>(input), cmp };
+        return Range<Inner>{std::forward<InputRange>(input), cmp};
     }
 
     template <class InputRange>
         [[nodiscard]] constexpr auto operator()(InputRange&& input) && noexcept {
         using Inner = RX_REMOVE_CVREF_T<InputRange>;
-        return Range<Inner> { std::forward<InputRange>(input), std::move(cmp) };
+        return Range<Inner>{std::forward<InputRange>(input), std::move(cmp)};
     }
 };
 template <class Compare>
@@ -1188,7 +1292,7 @@ struct reverse {
     template <class InputRange>
     [[nodiscard]] constexpr auto operator()(InputRange&& input) const noexcept {
         using Inner = RX_REMOVE_CVREF_T<InputRange>;
-        return Range<Inner> {std::forward<InputRange>(input)};
+        return Range<Inner>{std::forward<InputRange>(input)};
     }
 };
 

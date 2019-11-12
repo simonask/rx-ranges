@@ -267,6 +267,11 @@ TEST_CASE("ranges enumerate with indices") {
         }
     }
 
+    auto a = zip(seq(), input) | to_vector();
+    auto b = enumerate(input) | to_vector();
+    CHECK(a == b);
+}
+
 TEST_CASE("ranges reverse") {
     auto input = std::vector {{ 2, 3, 6, 1, 7, 8, 3, 4 }};
     auto result = input | sort() | reverse() | to_vector();
