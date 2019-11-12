@@ -307,10 +307,11 @@ constexpr void sink(
             } else {
                 out.emplace(in.get());
             }
-        } else if constexpr (!std::is_same_v<Out, detail::invalid_type<output_type>>) {
-            static_assert(
-                std::is_same_v<Out, detail::invalid_type<output_type>>, "Output supports neither emplace_back(), push_back(), nor emplace().");
         }
+        // else if constexpr (!std::is_same_v<Out, detail::invalid_type<output_type>>) {
+        //     static_assert(
+        //         std::is_same_v<Out, detail::invalid_type<output_type>>, "Output supports neither emplace_back(), push_back(), nor emplace().");
+        // }
 
         in.next();
     }
