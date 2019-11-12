@@ -423,6 +423,14 @@ template <size_t N, class T>
     return IteratorRange{std::begin(collection), std::end(collection)};
 }
 
+
+// Sinks need to be able to indicate their output type, but don't want to actually convert their
+// inputs to input ranges with as_input_range(), because that would allocate temporary storage when
+// chaining sinks.
+template <class T>
+using get_output_type_of_t =
+    typename RX_REMOVE_CVREF_T<decltype(as_input_range(std::declval<T>()))>::output_type;
+
 template <class T>
 struct VectorRange {
     using output_type = const T&;
@@ -929,7 +937,7 @@ struct first {
 struct to_vector {
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& range) const {
-        std::vector<RX_REMOVE_CVREF_T<typename RX_REMOVE_CVREF_T<R>::output_type>> vec;
+        std::vector<RX_REMOVE_CVREF_T<get_output_type_of_t<R>>> vec;
         sink(std::forward<R>(range), vec);
         return vec;
     }
@@ -941,7 +949,7 @@ struct to_vector {
 struct to_list {
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& range) const {
-        std::list<RX_REMOVE_CVREF_T<typename RX_REMOVE_CVREF_T<R>::output_type>> list;
+        std::list<RX_REMOVE_CVREF_T<get_output_type_of_t<R>>> list;
         sink(std::forward<R>(range), list);
         return list;
     }
@@ -959,7 +967,7 @@ struct to_list {
 struct to_map {
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& range) const {
-        using output_type = typename RX_REMOVE_CVREF_T<R>::output_type;
+        using output_type = get_output_type_of_t<R>;
         using key_type = RX_REMOVE_CVREF_T<std::tuple_element_t<0, output_type>>;
         using value_type = RX_REMOVE_CVREF_T<std::tuple_element_t<1, output_type>>;
         std::map<key_type, value_type> result;
@@ -974,7 +982,7 @@ struct to_map {
 struct to_set {
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& range) const {
-        using output_type = RX_REMOVE_CVREF_T<typename RX_REMOVE_CVREF_T<R>::output_type>;
+        using output_type = RX_REMOVE_CVREF_T<get_output_type_of_t<R>>;
         std::set<output_type> result;
         sink(std::forward<R>(range), result);
         return result;
@@ -987,7 +995,8 @@ struct to_set {
 struct count {
     template <class R>
     [[nodiscard]] constexpr size_t operator()(R&& range) const {
-        RX_TYPE_ASSERT(is_finite<RX_REMOVE_CVREF_T<R>>);
+        using range_type = RX_REMOVE_CVREF_T<decltype(as_input_range(std::forward<R>(range)))>;
+        RX_TYPE_ASSERT(is_finite<range_type>);
         auto copy = as_input_range(std::forward<R>(range));
         size_t n = 0;
         while (!copy.at_end()) {
@@ -1012,8 +1021,8 @@ struct foldl {
 
     template <class InputRange>
     constexpr T operator()(InputRange&& input) {
-        RX_TYPE_ASSERT(is_finite<RX_REMOVE_CVREF_T<InputRange>>);
         auto copy = as_input_range(std::forward<InputRange>(input));
+        RX_TYPE_ASSERT(is_finite<decltype(copy)>);
         T accum = init;
         while (!copy.at_end()) {
             accum = func(accum, copy.get());
@@ -1029,7 +1038,7 @@ struct sum {
     constexpr sum() noexcept {}
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& input) noexcept {
-        using type = RX_REMOVE_CVREF_T<typename RX_REMOVE_CVREF_T<R>::output_type>;
+        using type = get_output_type_of_t<R>;
         return std::forward<R>(input)
                | foldl(
                    type{}, [](type accum, auto&& x) constexpr { return accum + x; });
@@ -1040,7 +1049,7 @@ struct max {
     constexpr max() noexcept {}
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& input) noexcept {
-        using type = RX_REMOVE_CVREF_T<typename RX_REMOVE_CVREF_T<R>::output_type>;
+        using type = get_output_type_of_t<R>;
         auto folder = foldl(
             RX_OPTIONAL<type>{}, [](auto&& accum, auto&& x) constexpr {
                 if (accum) {
@@ -1056,7 +1065,7 @@ struct max {
 struct min {
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& input) noexcept {
-        using type = RX_REMOVE_CVREF_T<typename RX_REMOVE_CVREF_T<R>::output_type>;
+        using type = RX_REMOVE_CVREF_T<get_output_type_of_t<R>>;
         auto folder = foldl(
             RX_OPTIONAL<type>{}, [](auto&& accum, auto&& x) constexpr {
                 if (accum) {
@@ -1083,8 +1092,8 @@ struct any_of {
 
     template <class R>
     [[nodiscard]] constexpr bool operator()(R&& range) const {
-        RX_TYPE_ASSERT(is_finite<RX_REMOVE_CVREF_T<R>>);
         auto copy = as_input_range(std::forward<R>(range));
+        RX_TYPE_ASSERT(is_finite<decltype(copy)>);
         while (!copy.at_end()) {
             if (pred(copy.get())) {
                 return true;
@@ -1111,8 +1120,8 @@ struct all_of {
 
     template <class R>
     [[nodiscard]] constexpr bool operator()(R&& range) {
-        RX_TYPE_ASSERT(is_finite<RX_REMOVE_CVREF_T<R>>);
         auto copy = as_input_range(std::forward<R>(range));
+        RX_TYPE_ASSERT(is_finite<decltype(copy)>);
         while (!copy.at_end()) {
             if (!pred(copy.get())) {
                 return false;
@@ -1138,8 +1147,8 @@ struct none_of {
 
     template <class R>
     [[nodiscard]] constexpr bool operator()(R&& range) {
-        RX_TYPE_ASSERT(is_finite<RX_REMOVE_CVREF_T<R>>);
         auto copy = as_input_range(std::forward<R>(range));
+        RX_TYPE_ASSERT(is_finite<decltype(copy)>);
         while (!copy.at_end()) {
             if (pred(copy.get())) {
                 return false;
@@ -1168,13 +1177,6 @@ struct append {
 };
 template <class C>
 append(C&)->append<C>;
-
-// Sinks need to be able to indicate their output type, but don't want to actually convert their
-// inputs to input ranges with as_input_range(), because that would allocate temporary storage when
-// chaining sinks.
-template <class T>
-using get_output_type_of_t =
-    typename RX_REMOVE_CVREF_T<decltype(as_input_range(std::declval<T>()))>::output_type;
 
 /// Sorting sink.
 ///
