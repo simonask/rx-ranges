@@ -908,7 +908,7 @@ struct foldl {
     F func;
 
     template <class U, class E>
-    foldl(U&& init, E&& func) : init(std::forward<U>(init)), func(std::forward<E>(func)) {}
+    constexpr foldl(U&& init, E&& func) : init(std::forward<U>(init)), func(std::forward<E>(func)) {}
 
     template <class InputRange>
     constexpr T operator()(InputRange&& input) {
@@ -932,6 +932,7 @@ template <class T, class F>
 foldl(T&&, F &&)->foldl<RX_REMOVE_CVREF_T<T>, RX_REMOVE_CVREF_T<F>>;
 
 struct sum {
+    constexpr sum() noexcept {}
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& input) noexcept {
         using type = RX_REMOVE_CVREF_T<typename RX_REMOVE_CVREF_T<R>::output_type>;
@@ -941,6 +942,7 @@ struct sum {
 };
 
 struct max {
+    constexpr max() noexcept {}
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& input) noexcept {
         using type = RX_REMOVE_CVREF_T<typename RX_REMOVE_CVREF_T<R>::output_type>;
