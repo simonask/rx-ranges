@@ -132,4 +132,4 @@ auto sorted = strings | sort() | to_vector();
 // => {"1"s, "2"s, "4"s, "4"s, "6"s, "7"s}
 ~~~
 
-See [test/test_ranges.cpp](the tests) for more.
+See [tree/master/test/test_ranges.cpp](the tests) for more.
