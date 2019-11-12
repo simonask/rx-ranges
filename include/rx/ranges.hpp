@@ -1065,6 +1065,13 @@ struct append {
 template <class C>
 append(C&)->append<C>;
 
+// Sinks need to be able to indicate their output type, but don't want to actually convert their
+// inputs to input ranges with as_input_range(), because that would allocate temporary storage when
+// chaining sinks.
+template <class T>
+using get_output_type_of_t =
+    typename RX_REMOVE_CVREF_T<decltype(as_input_range(std::declval<T>()))>::output_type;
+
 /// Sorting sink.
 ///
 /// Writes the result of the inner range to the output, and sorts the output container.
@@ -1075,7 +1082,7 @@ struct sort {
 
     template <class InputRange>
     struct Range {
-        using output_type = typename InputRange::output_type;
+        using output_type = get_output_type_of_t<InputRange>;
         InputRange input;
         Compare cmp;
         constexpr Range(InputRange input, Compare cmp)
@@ -1119,7 +1126,7 @@ struct uniq {
 
     template <class InputRange>
     struct Range {
-        using output_type = typename InputRange::output_type;
+        using output_type = get_output_type_of_t<InputRange>;
         InputRange input;
         Compare cmp;
         constexpr Range(InputRange input, Compare cmp) noexcept
@@ -1149,6 +1156,41 @@ struct uniq {
 template <class Compare>
 uniq(Compare &&)->uniq<RX_REMOVE_CVREF_T<Compare>>;
 uniq()->uniq<>;
+
+/// Reverse range sink.
+///
+/// Writes the result of the inner range to the output, then reverses the order of the elements
+/// using `std::reverse()`.
+///
+/// Note: Contrary to other range implementations, this requires storage. If the output is sinked
+/// into a container, the storage for that container will be used, but otherwise temporary storage
+/// will be allocated.
+///
+/// If multiple sinks are chained, they will reuse the same storage (i.e., `sort() | reverse()` will
+/// operate on the same output container, modifying it in turn).
+struct reverse {
+    constexpr reverse() noexcept {}
+
+    template <class InputRange>
+    struct Range {
+        using output_type = get_output_type_of_t<InputRange>;
+        InputRange input;
+        constexpr explicit Range(InputRange input) : input(std::move(input)) {}
+
+        template <class Out>
+            constexpr void sink(Out& out) && noexcept {
+            using RX_NAMESPACE::sink; // enable ADL
+            sink(std::move(input), out);
+            std::reverse(std::begin(out), std::end(out));
+        }
+    };
+
+    template <class InputRange>
+    [[nodiscard]] constexpr auto operator()(InputRange&& input) const noexcept {
+        using Inner = RX_REMOVE_CVREF_T<InputRange>;
+        return Range<Inner> {std::forward<InputRange>(input)};
+    }
+};
 
 } // namespace RX_NAMESPACE
 

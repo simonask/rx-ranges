@@ -266,6 +266,12 @@ TEST_CASE("ranges enumerate with indices") {
             CHECK(false);
         }
     }
+
+TEST_CASE("ranges reverse") {
+    auto input = std::vector {{ 2, 3, 6, 1, 7, 8, 3, 4 }};
+    auto result = input | sort() | reverse() | to_vector();
+    auto expected = std::vector {{ 8, 7, 6, 4, 3, 3, 2, 1 }};
+    CHECK(result == expected);
 }
 
 /*
