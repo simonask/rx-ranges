@@ -763,10 +763,10 @@ struct ZipRange {
 
     template <class... Args>
     constexpr explicit ZipRange(Args&&... args)
-        : inputs(std::make_tuple(std::forward<Args>(args)...)) {}
+        : inputs(std::forward<Args>(args)...) {}
 
     [[nodiscard]] constexpr output_type get() const noexcept {
-        return std::make_tuple(std::get<Inputs>(inputs).get()...);
+        return std::tuple(std::get<Inputs>(inputs).get()...);
     }
 
     constexpr void next() noexcept {
@@ -795,7 +795,8 @@ ZipRange(Inputs&&...)->ZipRange<RX_REMOVE_CVREF_T<Inputs>...>;
 */
 template <class... Inputs>
 [[nodiscard]] constexpr auto zip(Inputs&&... inputs) noexcept {
-    return ZipRange { std::forward<Inputs>(inputs)... };
+    // Constructor deduction guides seem buggy on GCC 9.1.
+    return ZipRange<RX_REMOVE_CVREF_T<Inputs>...>(std::forward<Inputs>(inputs)...);
 }
 
 /*!
@@ -917,13 +918,7 @@ struct foldl {
         T accum = init;
         while (!copy.at_end()) {
             accum = func(accum, copy.get());
-            if constexpr (std::is_same_v<RX_REMOVE_CVREF_T<T>, RX_OPTIONAL<int>>) {
-                RX_ASSERT(!accum || *accum >= 0 || *accum < 5);
-            }
             copy.next();
-            if constexpr (std::is_same_v<RX_REMOVE_CVREF_T<T>, RX_OPTIONAL<int>>) {
-                RX_ASSERT(*accum >= 0 || *accum < 5);
-            }
         }
         return accum;
     }
@@ -937,7 +932,7 @@ struct sum {
     [[nodiscard]] constexpr auto operator()(R&& input) noexcept {
         using type = RX_REMOVE_CVREF_T<typename RX_REMOVE_CVREF_T<R>::output_type>;
         return std::forward<R>(input)
-               | foldl(type {}, [](type accum, auto&& x) { return accum + x; });
+               | foldl(type {}, [](type accum, auto&& x) constexpr { return accum + x; });
     }
 };
 
@@ -946,15 +941,14 @@ struct max {
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& input) noexcept {
         using type = RX_REMOVE_CVREF_T<typename RX_REMOVE_CVREF_T<R>::output_type>;
-        RX_OPTIONAL<type> init;
-        auto folder = foldl(init, [](auto&& accum, auto&& x) {
+        auto folder = foldl(RX_OPTIONAL<type>{}, [](auto&& accum, auto&& x) constexpr {
             if (accum) {
                 return std::max(*accum, x);
             } else {
                 return x;
             }
         });
-        return folder(std::forward<R>(input));
+        return std::move(folder)(std::forward<R>(input));
     }
 };
 
@@ -962,15 +956,14 @@ struct min {
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& input) noexcept {
         using type = RX_REMOVE_CVREF_T<typename RX_REMOVE_CVREF_T<R>::output_type>;
-        RX_OPTIONAL<type> init;
-        auto folder = foldl(init, [](auto&& accum, auto&& x) {
+        auto folder = foldl(RX_OPTIONAL<type>{}, [](auto&& accum, auto&& x) constexpr {
             if (accum) {
                 return std::min(*accum, x);
             } else {
                 return x;
             }
         });
-        return folder(std::forward<R>(input));
+        return std::move(folder)(std::forward<R>(input));
     }
 };
 
