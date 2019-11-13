@@ -8,7 +8,7 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: install dependencies
-      run: sudo apt-get install boost doctest-dev
+      run: sudo apt-get install libboost-dev doctest-dev
     - name: make build dir
       run: mkdir build
     - name: configure
