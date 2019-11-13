@@ -2,6 +2,7 @@
 #define RX_RANGES_HPP_INCLUDED
 
 #include <algorithm>
+#include <array>
 #include <list>
 #include <map>
 #include <set>
@@ -903,6 +904,326 @@ template <class... Inputs>
 [[nodiscard]] constexpr auto zip(Inputs&&... inputs) noexcept {
     return ZipRange(as_input_range(std::forward<Inputs>(inputs))...);
 }
+
+template <size_t...>
+struct in_groups_of_exactly;
+
+/*!
+    @brief Produce sequential groups of exactly N elements, where N is known at compile-time.
+
+    The output type is `std::array<T, N>` rvalue reference, where T is the output type of the
+    inner range (without cvref-qualifiers).
+
+    If the input produces a number of inputs that is not divisible by N, those
+    elements will be skipped.
+*/
+template <size_t N>
+struct in_groups_of_exactly<N> {
+    static_assert(N != 0);
+
+    template <class R>
+    struct Range {
+        R inner;
+        using element_type = RX_REMOVE_CVREF_T<typename R::output_type>;
+        using output_type = std::array<element_type, N>&&;
+        static constexpr bool is_finite = R::is_finite;
+
+        constexpr explicit Range(R inner) : inner(std::move(inner)) {
+            fill_group();
+        }
+
+        mutable std::array<element_type, N> storage;
+
+        [[nodiscard]] constexpr output_type get() const noexcept {
+            return std::move(storage);
+        }
+
+        [[nodiscard]] constexpr bool at_end() const noexcept {
+            return inner.at_end();
+        }
+
+        constexpr void next() noexcept {
+            inner.next();
+            fill_group();
+        }
+
+        [[nodiscard]] constexpr size_t size_hint() const noexcept {
+            return inner.size_hint() / N;
+        }
+
+        constexpr void fill_group() {
+            // Fill from the current position, but don't increment into the next group.
+            size_t i = 0;
+            while (true) {
+                if (inner.at_end())
+                    return;
+                storage[i++] = inner.get();
+                if (i == N)
+                    return;
+                inner.next();
+            }
+        }
+    };
+
+    template <class R>
+    [[nodiscard]] constexpr auto operator()(R&& input) const {
+        using Inner = RX_REMOVE_CVREF_T<decltype(as_input_range(std::forward<R>(input)))>;
+        return Range<Inner>{as_input_range(std::forward<R>(input))};
+    }
+};
+
+/*!
+    @brief Produce sequential groups of exactly N elements, where N is only known at runtime.
+
+    The output type is `std::vector<N>` const reference, where T is the output type of the inner
+    range (without cvref-qualifiers), and the size of the result is always N.
+
+    If the input produces a number of inputs that is not divisible by N, those elements will be
+    skipped.
+*/
+template <>
+struct in_groups_of_exactly<> {
+    size_t n;
+
+    constexpr explicit in_groups_of_exactly(size_t n) noexcept : n(n) {}
+
+    template <class R>
+    struct Range {
+        using element_type = RX_REMOVE_CVREF_T<typename R::output_type>;
+        using output_type = const std::vector<element_type>&;
+        static constexpr bool is_finite = R::is_finite;
+
+        R inner;
+        const size_t n;
+        std::vector<element_type> storage;
+
+        constexpr explicit Range(R inner, size_t n) : inner(std::move(inner)), n(n) {
+            storage.reserve(n);
+            fill_group();
+        }
+
+
+        [[nodiscard]] constexpr output_type get() const noexcept {
+            return storage;
+        }
+
+        [[nodiscard]] constexpr bool at_end() const noexcept {
+            return inner.at_end();
+        }
+
+        constexpr void next() noexcept {
+            inner.next();
+            fill_group();
+        }
+
+        constexpr size_t size_hint() const noexcept {
+            return inner.size_hint() / n;
+        }
+
+        constexpr void fill_group() {
+            storage.clear(); // recycle the vector
+            // Fill from the current position, but don't increment into the next group.
+            while (true) {
+                if (inner.at_end())
+                    return;
+                storage.emplace_back(inner.get());
+                if (storage.size() == n)
+                    return;
+                inner.next();
+            }
+        }
+    };
+
+    template <class R>
+    [[nodiscard]] auto operator()(R&& input) const {
+        using Inner = RX_REMOVE_CVREF_T<decltype(as_input_range(std::forward<R>(input)))>;
+        return Range<Inner>{as_input_range(std::forward<R>(input)), n};
+    }
+};
+
+in_groups_of_exactly(size_t) -> in_groups_of_exactly<>;
+
+/*!
+    @brief Produce sequential groups of N or fewer elements.
+
+    The output type is `std::vector<N>` const reference, where T is the output type of the inner
+    range (without cvref-qualifiers), and the size of the result is never greater than N.
+
+    If the input produces a number of inputs that is not divisible by N, the last group produces
+    will have a size < N.
+*/
+struct in_groups_of {
+    size_t n;
+
+    explicit in_groups_of(size_t n) : n(n) {
+        if (n == 0) {
+            throw std::runtime_error("in_groups_of(0) is not allowed");
+        }
+    }
+
+    template <class R>
+    struct Range {
+        using element_type = RX_REMOVE_CVREF_T<typename R::output_type>;
+        using output_type = const std::vector<element_type>&;
+        static constexpr bool is_finite = R::is_finite;
+
+        R inner;
+        std::vector<element_type> storage;
+        size_t n;
+        bool end = false;
+
+        Range(R inner, size_t n) : inner(std::move(inner)), n(n) {
+            if (this->inner.at_end()) {
+                end = true;
+            } else {
+                storage.reserve(n);
+                fill_group();
+            }
+        }
+
+        [[nodiscard]] output_type get() const noexcept {
+            RX_ASSERT(storage.size() != 0);
+            return storage;
+        }
+
+        [[nodiscard]] bool at_end() const noexcept {
+            return end;
+        }
+
+        void next() noexcept {
+            if (inner.at_end()) {
+                end = true;
+            } else {
+                fill_group();
+            }
+        }
+
+        [[nodiscard]] size_t size_hint() const noexcept {
+            // Round up.
+            return (inner.size_hint() + n - 1) / n;
+        }
+
+        void fill_group() {
+            // recycle the vector
+            storage.clear();
+            storage.emplace_back(inner.get());
+            inner.next();
+            while (true) {
+                if (inner.at_end())
+                    return;
+                if (storage.size() == n)
+                    return;
+                storage.emplace_back(inner.get());
+                inner.next();
+            }
+        }
+    };
+
+    template <class R>
+    [[nodiscard]] constexpr auto operator()(R&& input) const {
+        using Inner = RX_REMOVE_CVREF_T<decltype(as_input_range(std::forward<R>(input)))>;
+        return Range<Inner>{as_input_range(std::forward<R>(input)), n};
+    }
+};
+
+/*!
+    @brief Produce consecutive groups of elements for which P returns the same value, according to
+    the Compare function.
+
+    The output type is `std::vector<N>` const reference, where T is the output type of the inner
+    range (without cvref-qualifiers). The size of the vector is indeterminate, but always greater
+    than 0.
+
+    @tparam P The discriminant function. When the return value of this function changes, according
+              to Compare, a new group is emitted.
+    @tparam Compare The compare function used to compare return values of P.
+*/
+template <class P, class Compare = std::equal_to<void>>
+struct group_adjacent_by {
+    P pred;
+    Compare cmp;
+    template <class T, class C>
+    constexpr explicit group_adjacent_by(T&& pred, C&& cmp) : pred(std::forward<T>(pred)), cmp(std::forward<C>(cmp)) {}
+    template <class T>
+    constexpr explicit group_adjacent_by(T&& pred) : pred(std::forward<T>(pred)) {}
+
+    template <class R>
+    struct Range {
+        using element_type = RX_REMOVE_CVREF_T<typename R::output_type>;
+        using output_type = const std::vector<element_type>&;
+        static constexpr bool is_finite = R::is_finite;
+
+        R inner;
+        P pred;
+        Compare cmp;
+        std::vector<element_type> storage;
+        bool end = false;
+
+        Range(R inner, P pred, Compare cmp) : inner(std::move(inner)), pred(std::move(pred)), cmp(std::move(cmp)) {
+            if (this->inner.at_end()) {
+                end = true;
+            } else {
+                fill_group();
+            }
+        }
+
+        [[nodiscard]] output_type get() const noexcept {
+            return storage;
+        }
+
+        [[nodiscard]] bool at_end() const noexcept {
+            return end;
+        }
+
+        void next() noexcept {
+            if (inner.at_end()) {
+                end = true;
+            } else {
+                fill_group();
+            }
+        }
+
+        [[nodiscard]] size_t size_hint() const noexcept {
+            return 0;
+        }
+
+        void fill_group() {
+            // Note: As opposed to the in_groups_of combinators, we must already be at the beginning
+            // of a new group when this function is called, because we can't "rewind" after seeing
+            // that the predicate returned a new value.
+
+            // recycle the vector
+            storage.clear();
+
+            const auto& current = inner.get(); // lifetime extension for value types
+            auto p = pred(current);
+            storage.emplace_back(inner.get()); // potentially move
+            inner.next();
+            while (true) {
+                if (inner.at_end())
+                    return;
+                const auto& q = inner.get(); // lifetime extension for value types
+                if (cmp(p, pred(q))) {
+                    storage.emplace_back(inner.get()); // potentially move
+                    inner.next();
+                } else {
+                    return;
+                }
+            }
+        }
+    };
+
+    template <class R>
+    [[nodiscard]] constexpr auto operator()(R&& input) const {
+        using Inner = RX_REMOVE_CVREF_T<decltype(as_input_range(std::forward<R>(input)))>;
+        return Range<Inner>{as_input_range(std::forward<R>(input)), pred, cmp};
+    }
+};
+
+template <class P>
+group_adjacent_by(P&&) -> group_adjacent_by<RX_REMOVE_CVREF_T<P>>;
+template <class P, class Compare>
+group_adjacent_by(P&&, Compare&&) -> group_adjacent_by<RX_REMOVE_CVREF_T<P>, RX_REMOVE_CVREF_T<Compare>>;
 
 /*!
     @brief Enumerate elements of the input sequentially.
