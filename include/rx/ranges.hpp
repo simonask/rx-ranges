@@ -246,7 +246,8 @@ struct input_range_iterator {
     [[nodiscard]] constexpr decltype(auto) operator*() const noexcept {
         return range.get();
     }
-    [[nodiscard]] constexpr auto operator-> () const noexcept {
+    template <class T = typename R::output_type, class = std::enable_if_t<std::is_lvalue_reference_v<T>>>
+    [[nodiscard]] constexpr auto operator->() const noexcept {
         return &range.get();
     }
 };
