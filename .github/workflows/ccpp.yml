@@ -1,0 +1,19 @@
+name: C/C++ CI
+
+on: [push, pull_request]
+
+jobs:
+  test-linux:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: install dependencies
+      run: apt-get install boost doctest-dev
+    - name: make build dir
+      run: mkdir build
+    - name: configure
+      run: cmake -S . -B build -G Ninja -DRX_TEST=ON
+    - name: build
+      run: ninja -C build
+    - name: run tests
+      run: build/rx-ranges-test
