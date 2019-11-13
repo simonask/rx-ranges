@@ -282,6 +282,129 @@ TEST_CASE("ranges reverse") {
     CHECK(result == expected);
 }
 
+TEST_CASE("ranges in_groups_of_exactly, constant size") {
+    auto input = seq<float>() | take(1000) | to_vector();
+
+    size_t num_groups = input | in_groups_of_exactly<4>() | count();
+    CHECK(num_groups == 250);
+
+    // In optimized builds, compilers should be able to auto-vectorize this.
+    std::array<float, 4> sums = {0.f, 0.f, 0.f, 0.f};
+    for (auto group : input | in_groups_of_exactly<4>()) {
+        // This becomes a single _mm_add_ps on Clang, but not MSVC.
+        std::get<0>(sums) += std::get<0>(group);
+        std::get<1>(sums) += std::get<1>(group);
+        std::get<2>(sums) += std::get<2>(group);
+        std::get<3>(sums) += std::get<3>(group);
+    }
+
+    std::array<float, 4> expected_sums = {0.f, 0.f, 0.f, 0.f};
+    for (auto [i, x]: enumerate(input)) {
+        expected_sums[i % 4] += x;
+    }
+
+    CHECK(sums == expected_sums);
+}
+
+TEST_CASE("ranges in_groups_of_exactly, dynamic size") {
+    auto input = seq<float>() | take(1000) | to_vector();
+
+    size_t num_groups = input | in_groups_of_exactly(4) | count();
+    CHECK(num_groups == 250);
+
+    // In optimized builds, compilers should be able to auto-vectorize this.
+    std::array<float, 4> sums = {0.f, 0.f, 0.f, 0.f};
+    for (auto group : input | in_groups_of_exactly(4)) {
+        std::get<0>(sums) += group[0];
+        std::get<1>(sums) += group[1];
+        std::get<2>(sums) += group[2];
+        std::get<3>(sums) += group[3];
+    }
+
+    std::array<float, 4> expected_sums = {0.f, 0.f, 0.f, 0.f};
+    for (auto [i, x]: enumerate(input)) {
+        expected_sums[i % 4] += x;
+    }
+
+    CHECK(sums == expected_sums);
+}
+
+TEST_CASE("ranges in_groups_of") {
+    const auto input = seq<float>() | take(1001) | to_vector();
+
+    size_t num_groups_even = seq() | take(12) | in_groups_of(4) | count();
+    CHECK(num_groups_even == 3);
+
+    size_t num_groups = input | in_groups_of(4) | count();
+    CHECK(num_groups == 251);
+
+    std::array<float, 4> sums = {0.f, 0.f, 0.f, 0.f};
+    float last = 0.f;
+    auto groups = input | in_groups_of(4);
+
+    // For some reason, MSVC does not correctly find begin()/end() via ADL in range-based for loops
+    // for this particular case. It's a bit of a mystery, since this works for all the other range
+    // types, and there doesn't seem to be any difference in how the in_groups_of() adapter works.
+    for (auto it = begin(groups); it != end(groups); ++it) {
+        auto& group = *it;
+        CHECK(group.size() != 0);
+        if (group.size() == 4) {
+            std::get<0>(sums) += group[0];
+            std::get<1>(sums) += group[1];
+            std::get<2>(sums) += group[2];
+            std::get<3>(sums) += group[3];
+        } else {
+            last = group.back();
+        }
+    }
+
+    std::array<float, 4> expected_sums = {0.f, 0.f, 0.f, 0.f};
+    float expected_last = 0.f;
+    for (auto [i, x]: enumerate(input)) {
+        if (i < 1000) {
+            expected_sums[i % 4] += x;
+        } else {
+            expected_last = x;
+        }
+    }
+
+    CHECK(sums == expected_sums);
+    CHECK(last == expected_last);
+}
+
+TEST_CASE("ranges group_adjacent_by") {
+    const auto input = seq() | take(10) | to_vector();
+
+    auto pred = [](int x) {
+        return x / 3;
+    };
+
+    auto groups = input | group_adjacent_by(pred);
+    auto tmp = groups | to_vector();
+    size_t num_groups = groups | count();
+    CHECK(num_groups == 4);
+
+    // For some reason, MSVC does not correctly find begin()/end() via ADL in range-based for loops
+    // for this particular case. It's a bit of a mystery, since this works for all the other range
+    // types, and there doesn't seem to be any difference in how the in_groups_of() adapter works.
+    int previous = std::numeric_limits<int>::max();
+    for (auto it = begin(groups); it != end(groups); ++it) {
+        const auto& group = *it;
+        for (auto x : group) {
+            CHECK(pred(x) == pred(group[0]));
+            CHECK(pred(x) != previous);
+        }
+        previous = pred(group[0]);
+    }
+
+    auto group_vectors = groups | to_vector(); // vector<vector<int>>;
+    CHECK(group_vectors.size() == 4);
+    CHECK(group_vectors[0] == std::vector{{0, 1, 2}});
+    CHECK(group_vectors[1] == std::vector{{3, 4, 5}});
+    CHECK(group_vectors[2] == std::vector{{6, 7, 8}});
+    CHECK(group_vectors[3] == std::vector{1, 9}); // note: initializer list brokenness abound
+}
+
 /*
 TEST_CASE("ranges append to non-container [no compile]") {
     double not_a_container = 0;
