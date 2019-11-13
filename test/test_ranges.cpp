@@ -237,7 +237,7 @@ TEST_CASE("ranges sum") {
     CHECK(s == 5);
 
     auto d = fill_n(5, 1.0) | sum();
-    CHECK(s == 5.0);
+    CHECK(d == 5.0);
 }
 
 TEST_CASE("ranges max") {
