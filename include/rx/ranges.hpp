@@ -1174,6 +1174,30 @@ template <class P>
 none_of(P &&)->none_of<P>;
 
 /*!
+    @brief Perform action for each element of the input range.
+
+    This is usually redundant, since normal range-based for loops are supported, but in some cases
+    it can yield more readable code, especially for long chains of combinators.
+*/
+template <class F>
+struct for_each {
+    F func;
+    template <class T>
+    constexpr explicit for_each(T&& func) : func(std::forward<T>(func)) {}
+
+    template <class R>
+    constexpr void operator()(R&& range) {
+        auto copy = as_input_range(std::forward<R>(range));
+        while (!copy.at_end()) {
+            func(copy.get());
+            copy.next();
+        }
+    }
+};
+template <class F>
+for_each(F&&) -> for_each<RX_REMOVE_CVREF_T<F>>;
+
+/*!
     @brief Append elements from the range into an existing container.
 */
 template <class C>
