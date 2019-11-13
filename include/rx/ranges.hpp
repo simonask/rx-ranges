@@ -488,23 +488,33 @@ template <
 
     Combine with things like \a take or \a until to create a finite range.
 
+    Note: `generate` is idempotent, i.e. it only calls the function once for each iteration. For
+           this reason, the last return value is stored internally.
+
     @tparam F A function that will be invoked to produce an output.
 */
 template <class F>
 struct generate {
-    mutable F func;
-
-    using output_type = decltype(func());
+    using element_type = RX_REMOVE_CVREF_T<decltype(std::declval<F>()())>;
+    using output_type = const element_type&;
     static constexpr bool is_finite = false;
-    template <class T>
-    constexpr explicit generate(T&& func) : func(std::forward<T>(func)) {}
 
-    constexpr void next() noexcept {}
+    F func;
+    element_type cache;
+
+    template <class T>
+    constexpr explicit generate(T&& func) : func(std::forward<T>(func)) {
+        cache = this->func();
+    }
+
+    constexpr void next() noexcept {
+        cache = func();
+    }
     [[nodiscard]] constexpr bool at_end() const noexcept {
         return false;
     }
     [[nodiscard]] constexpr output_type get() const {
-        return func();
+        return cache;
     }
     constexpr size_t size_hint() const noexcept {
         return 0;
