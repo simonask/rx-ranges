@@ -262,6 +262,7 @@ begin(R&& range, std::enable_if_t<is_input_range_v<RX_REMOVE_CVREF_T<R>>>* = nul
 template <class R>
 [[nodiscard]] constexpr auto
 end(const R&, std::enable_if_t<is_input_range_v<R>>* = nullptr) noexcept {
+    // Note: The first argument may be moved-from, but that's OK, we just need its type.
     return input_range_iterator_end{};
 }
 
