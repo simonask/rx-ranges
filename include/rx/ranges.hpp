@@ -505,9 +505,7 @@ struct generate {
     element_type cache;
 
     template <class T>
-    constexpr explicit generate(T&& func) : func(std::forward<T>(func)) {
-        cache = this->func();
-    }
+    constexpr explicit generate(T&& func_) : func(std::forward<T>(func_)), cache(func()) {}
 
     constexpr void next() noexcept {
         cache = func();
