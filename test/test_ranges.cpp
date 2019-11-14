@@ -387,12 +387,8 @@ TEST_CASE("ranges group_adjacent_by") {
     size_t num_groups = groups | count();
     CHECK(num_groups == 4);
 
-    // For some reason, MSVC does not correctly find begin()/end() via ADL in range-based for loops
-    // for this particular case. It's a bit of a mystery, since this works for all the other range
-    // types, and there doesn't seem to be any difference in how the in_groups_of() adapter works.
     int previous = std::numeric_limits<int>::max();
-    for (auto it = begin(groups); it != end(groups); ++it) {
-        const auto& group = *it;
+    for (const auto& group : groups) {
         for (auto x : group) {
             CHECK(pred(x) == pred(group[0]));
             CHECK(pred(x) != previous);

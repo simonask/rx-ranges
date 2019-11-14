@@ -219,42 +219,48 @@ constexpr auto operator|(LHS&& lhs, RHS&& rhs) noexcept {
     return std::forward<RHS>(rhs)(std::forward<LHS>(lhs));
 }
 
-struct input_range_iterator_end {};
 template <class R>
 struct input_range_iterator {
     R range;
+    constexpr input_range_iterator() noexcept = default;
     template <class Arg>
     constexpr explicit input_range_iterator(Arg&& range)
         noexcept(std::is_nothrow_constructible_v<R, std::in_place_t, std::add_rvalue_reference_t<Arg>>)
-        : range(std::forward<Arg>(range)) {}
+        : range(std::in_place, std::forward<Arg>(range)) {}
     constexpr input_range_iterator(input_range_iterator&&) noexcept(std::is_nothrow_move_constructible_v<R>) = default;
     constexpr input_range_iterator(const input_range_iterator&) noexcept(std::is_nothrow_copy_constructible_v<R>) = default;
     constexpr input_range_iterator& operator=(input_range_iterator&&) noexcept(std::is_nothrow_move_assignable_v<R>) = default;
     constexpr input_range_iterator& operator=(const input_range_iterator&) noexcept(std::is_nothrow_copy_assignable_v<R>) = default;
 
-    constexpr bool operator==(input_range_iterator_end) const {
-        return range.at_end();
+    constexpr bool operator==(const input_range_iterator &other) const noexcept {
+        RX_ASSERT(!bool(other.range));
+        return !bool(range) || range->at_end();
     }
-    constexpr bool operator!=(input_range_iterator_end) const {
-        return !range.at_end();
+    constexpr bool operator!=(const input_range_iterator &other) const noexcept {
+        return !(*this == other);
     }
 
     constexpr auto& operator++() noexcept {
-        RX_ASSERT(!range.at_end());
-        range.next();
+        RX_ASSERT(bool(range));
+        RX_ASSERT(!range->at_end());
+        range->next();
         return *this;
     }
 
     [[nodiscard]] constexpr decltype(auto) operator*() const noexcept {
-        return range.get();
+        RX_ASSERT(bool(range));
+        return range->get();
     }
-    template <class T = typename R::output_type, class = std::enable_if_t<std::is_lvalue_reference_v<T>>>
+    template <
+        class T = typename RX_REMOVE_CVREF_T<decltype(*range)>::output_type,
+        class = std::enable_if_t<std::is_lvalue_reference_v<T>>>
     [[nodiscard]] constexpr auto operator->() const noexcept {
-        return &range.get();
+        RX_ASSERT(bool(range));
+        return &range->get();
     }
 };
 template <class R>
-input_range_iterator(R &&)->input_range_iterator<RX_REMOVE_CVREF_T<R>>;
+input_range_iterator(R &&)->input_range_iterator<RX_OPTIONAL<RX_REMOVE_CVREF_T<R>>>;
 
 template <class R>
 [[nodiscard]] constexpr auto
@@ -263,9 +269,8 @@ begin(R&& range, std::enable_if_t<is_input_range_v<RX_REMOVE_CVREF_T<R>>>* = nul
 }
 template <class R>
 [[nodiscard]] constexpr auto
-end(const R&, std::enable_if_t<is_input_range_v<R>>* = nullptr) noexcept {
-    // Note: The first argument may be moved-from, but that's OK, we just need its type.
-    return input_range_iterator_end{};
+end(R&& range, std::enable_if_t<is_input_range_v<RX_REMOVE_CVREF_T<R>>>* = nullptr) noexcept {
+    return decltype(begin(std::forward<R>(range))){};
 }
 
 namespace detail {
