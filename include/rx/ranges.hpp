@@ -224,12 +224,13 @@ template <class R>
 struct input_range_iterator {
     R range;
     template <class Arg>
-    constexpr explicit input_range_iterator(Arg&& range) noexcept
+    constexpr explicit input_range_iterator(Arg&& range)
+        noexcept(std::is_nothrow_constructible_v<R, std::in_place_t, std::add_rvalue_reference_t<Arg>>)
         : range(std::forward<Arg>(range)) {}
-    constexpr input_range_iterator(input_range_iterator&&) noexcept = default;
-    constexpr input_range_iterator(const input_range_iterator&) noexcept = default;
-    constexpr input_range_iterator& operator=(input_range_iterator&&) noexcept = default;
-    constexpr input_range_iterator& operator=(const input_range_iterator&) noexcept = default;
+    constexpr input_range_iterator(input_range_iterator&&) noexcept(std::is_nothrow_move_constructible_v<R>) = default;
+    constexpr input_range_iterator(const input_range_iterator&) noexcept(std::is_nothrow_copy_constructible_v<R>) = default;
+    constexpr input_range_iterator& operator=(input_range_iterator&&) noexcept(std::is_nothrow_move_assignable_v<R>) = default;
+    constexpr input_range_iterator& operator=(const input_range_iterator&) noexcept(std::is_nothrow_copy_assignable_v<R>) = default;
 
     constexpr bool operator==(input_range_iterator_end) const {
         return range.at_end();
@@ -1055,10 +1056,8 @@ in_groups_of_exactly(size_t) -> in_groups_of_exactly<>;
 struct in_groups_of {
     size_t n;
 
-    explicit in_groups_of(size_t n) : n(n) {
-        if (n == 0) {
-            throw std::runtime_error("in_groups_of(0) is not allowed");
-        }
+    explicit in_groups_of(size_t n) noexcept : n(n) {
+        RX_ASSERT(n > 0);
     }
 
     template <class R>
@@ -1143,9 +1142,10 @@ struct group_adjacent_by {
     P pred;
     Compare cmp;
     template <class T, class C>
-    constexpr explicit group_adjacent_by(T&& pred, C&& cmp) : pred(std::forward<T>(pred)), cmp(std::forward<C>(cmp)) {}
+    constexpr explicit group_adjacent_by(T&& pred, C&& cmp) noexcept :
+        pred(std::forward<T>(pred)), cmp(std::forward<C>(cmp)) {}
     template <class T>
-    constexpr explicit group_adjacent_by(T&& pred) : pred(std::forward<T>(pred)) {}
+    constexpr explicit group_adjacent_by(T&& pred) noexcept : pred(std::forward<T>(pred)) {}
 
     template <class R>
     struct Range {
@@ -1654,6 +1654,7 @@ struct reverse {
         return Range<Inner>{std::forward<InputRange>(input)};
     }
 };
+
 
 } // namespace RX_NAMESPACE
 
