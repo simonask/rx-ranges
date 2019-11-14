@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <list>
 #include <map>
 #include <set>
@@ -177,6 +178,16 @@ struct has_std_get_0_1<
         decltype(std::get<1>(std::declval<const T&>()))>> : std::true_type {};
 template <class T>
 constexpr bool has_std_get_0_1_v = has_std_get_0_1<T>::value;
+
+template <class T, class Enable = void>
+struct has_size : std::false_type {};
+template <class T>
+struct has_size<
+    T,
+    std::void_t<decltype(std::size(std::declval<T&>()))>>
+    : std::true_type {};
+template <class T>
+constexpr bool has_size_v = has_size<T>::value;
 
 template <class T>
 struct is_finite : std::bool_constant<T::is_finite> {};
@@ -1652,6 +1663,23 @@ struct reverse {
     [[nodiscard]] constexpr auto operator()(InputRange&& input) const noexcept {
         using Inner = RX_REMOVE_CVREF_T<InputRange>;
         return Range<Inner>{std::forward<InputRange>(input)};
+    }
+};
+
+/// Get the length of a range.
+struct length {
+    constexpr length() noexcept {}
+    template <class R>
+    [[nodiscard]] constexpr std::size_t operator()(R&& input) noexcept {
+        if constexpr (has_size_v<R>) {
+            return std::size(input);
+        } else {
+            auto folder = foldl(
+                std::size_t(0), [](std::size_t accum, auto&&) constexpr {
+                    return accum + 1;
+                });
+            return std::move(folder)(std::forward<R>(input));
+        }
     }
 };
 

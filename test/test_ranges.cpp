@@ -405,6 +405,20 @@ TEST_CASE("ranges group_adjacent_by") {
     CHECK(group_vectors[3] == std::vector{1, 9}); // note: initializer list brokenness abound
 }
 
+TEST_CASE("range length") {
+    std::vector vector3{{0, 1, 2}};
+    int array4[] = {0, 1, 2, 3};
+    auto take5 = seq() | take(10) | filter([](int x) { return x % 2 == 1; });
+
+    auto vector3_size = vector3 | length();
+    auto array4_size = array4 | length();
+    auto take5_size = take5 | length();
+
+    CHECK(vector3_size == 3);
+    CHECK(array4_size == 4);
+    CHECK(take5_size == 5);
+}
+
 /*
 TEST_CASE("ranges append to non-container [no compile]") {
     double not_a_container = 0;
