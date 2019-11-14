@@ -287,6 +287,7 @@ TEST_CASE("ranges infinity propagates") {
 
 TEST_CASE("ranges enumerate with indices") {
     auto input = std::vector{{"a"s, "b"s, "c"s}};
+    size_t n = 0;
     for (auto pair : zip(input, seq())) {
         if (std::get<0>(pair) == "a") {
             CHECK(std::get<1>(pair) == 0);
@@ -297,7 +298,9 @@ TEST_CASE("ranges enumerate with indices") {
         } else {
             CHECK(false);
         }
+        ++n;
     }
+    CHECK(n == input.size());
 
     auto a = zip(seq<size_t>(), input) | to_vector();
     auto b = enumerate(input) | to_vector();
