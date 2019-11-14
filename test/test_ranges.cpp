@@ -405,7 +405,7 @@ TEST_CASE("ranges group_adjacent_by") {
     CHECK(group_vectors[0] == std::vector{{0, 1, 2}});
     CHECK(group_vectors[1] == std::vector{{3, 4, 5}});
     CHECK(group_vectors[2] == std::vector{{6, 7, 8}});
-    CHECK(group_vectors[3] == std::vector{1, 9}); // note: initializer list brokenness abound
+    CHECK(group_vectors[3] == std::vector<int>(1, 9));
 }
 
 /*
