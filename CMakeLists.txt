@@ -1,5 +1,4 @@
 cmake_minimum_required(VERSION 3.6)
-cmake_policy(SET CMP0076 NEW)
 project(rx-ranges VERSION 1.0.1)
 
 option(RX_TEST ON)
@@ -11,10 +10,11 @@ target_compile_features(rx-ranges INTERFACE
 )
 target_sources(rx-ranges
     INTERFACE
-        include/rx/ranges.hpp
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/rx/ranges.hpp"
 )
 target_include_directories(rx-ranges
-    INTERFACE include
+    INTERFACE
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
 
 if (RX_TEST)
