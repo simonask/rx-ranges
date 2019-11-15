@@ -1130,9 +1130,8 @@ struct in_groups_of {
     @brief Produce consecutive groups of elements for which P returns the same value, according to
     the Compare function.
 
-    The output type is `std::vector<N>` const reference, where T is the output type of the inner
-    range (without cvref-qualifiers). The size of the vector is indeterminate, but always greater
-    than 0.
+    The output type is a range of the same types as the input. The size of the range is
+    indeterminate, but always greater than 0.
 
     @tparam P The discriminant function. When the return value of this function changes, according
               to Compare, a new group is emitted.
