@@ -17,8 +17,10 @@ for range libraries is supported (see [./test/calendar.cpp](calendar.cpp) for mo
 ### Bugfixes
 
 - Overload resolution for `as_input_range()` was very confusing. This has been cleaned up.
+- Some operations that were expected to be idempotent were not (#1).
 - Combinators now support non-default-constructible value types, unless the output explicitly
-  requires it.
+  requires it (#7).
+- Fix `first()` after `sort()` (#8).
 
 ### Optimizations
 
