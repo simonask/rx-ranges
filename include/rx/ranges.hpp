@@ -9,13 +9,17 @@
 #include <type_traits>
 #include <vector>
 
-
+// This override is provided to avoid name clashes in foreign codebases where `rx` already has a
+// different meaning.
 #if !defined(RX_NAMESPACE_OVERRIDE)
 #define RX_NAMESPACE rx
 #else
 #define RX_NAMESPACE RX_NAMESPACE_OVERRIDE
 #endif
 
+// Some foreign libraries may have their own optional type, which may be optimized for their own
+// value types. For example, some libraries treat NaN values as "none", or provide "transparent"
+// optional when the value type has an "illegal" representation.
 #if !defined(RX_OPTIONAL_OVERRIDE)
 #include <optional>
 #define RX_OPTIONAL std::optional
@@ -23,12 +27,16 @@
 #define RX_OPTIONAL RX_OPTIONAL_OVERRIDE
 #endif
 
+// Some foreign libraries may provide a more user-friendly static assertion facility. Most compilers
+// don't give any context about the types that failed a `static_assert()` check in templated code.
 #if !defined(RX_TYPE_ASSERT_OVERRIDE)
 #define RX_TYPE_ASSERT(cond) static_assert(std::conjunction<cond>::value)
 #else
 #define RX_TYPE_ASSERT RX_TYPE_ASSERT_OVERRIDE
 #endif
 
+// Some foreign libraries may provide their own assertion facilities that integrate better with
+// their environment.
 #if !defined(RX_ASSERT_OVERRIDE)
 #include <cassert>
 #define RX_ASSERT(cond) assert(cond)
@@ -36,37 +44,64 @@
 #define RX_ASSERT RX_ASSERT_OVERRIDE
 #endif
 
-#if !defined(RX_REMOVE_CVREF_OVERRIDE)
-namespace RX_NAMESPACE::std_polyfill {
-template <class T>
-using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
-} // namespace RX_NAMESPACE::std_polyfill
-#define RX_REMOVE_CVREF_T RX_NAMESPACE::std_polyfill::remove_cvref_t
+// Unfortunately, this is not compatible with C++20 `[[likely]]` / `[[unlikely]]`, because it has a
+// different syntax structure.
+#if defined(__GNUC__) || defined(__clang__)
+#define RX_LIKELY(cond) __builtin_expect(!!(cond), 1)
+#define RX_UNLIKELY(cond) __builtin_expect(!!(cond), 0)
 #else
-#define RX_REMOVE_CVREF_T RX_REMOVE_CVREF_OVERRIDE
+#define RX_LIKELY(cond) (cond)
+#define RX_UNLIKELY(cond) (cond)
 #endif
 
 
+/*!
+    @brief rx::ranges library
+
+    Core concepts
+    =============
+
+    - Input range: An object that can produce a series of values. Input ranges can be chained
+                   together and combined to form aggregate input ranges.
+
+    - Sink:        An object that can receive values from input ranges in order to perform some
+                   action on the whole range of results. A chain of sinks will operate on the same
+                   resulting container without allocating any intermediate storage. Sinks can also
+                   be (implicitly) converted to input ranges, in which case temporary storage *will*
+                   be allocated for the intermediate result.
+
+*/
 namespace RX_NAMESPACE {
 
+template <class T>
+using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
 
 /*!
     @brief InputRange concept
 
-    An InputRange is expected to conform to the following interface:
+    An input range is expected to conform to the following interface:
 
     @code
+    // Required:
     using output_type = ...; // The output element type, usually typename Inner::output_type.
-    static constexpr bool is_finite = ...; // True if the range produces a bounded number of
-                                           // elements.
+
     output_type get() const noexcept; // Get the value at the current position.
+
     void next() noexcept; // Advance to the next position, returning true if there was more.
+
     bool at_end() const noexcept; // True if there are no more elements.
 
     size_t size_hint() const noexcept; // A hint about how many times `next()` can be called.
                                        // It is purely an optimization hint, not the accurate number
                                        // of times.
-    bool is_finite() const noexcept;
+
+    // Optional:
+
+    static constexpr bool is_finite = ...; // True if the range produces a bounded number of
+                                           // elements. Defaults to false.
+    static constexpr bool is_idempotent = ...; // True if `get()` can be called multiple times
+                                               // without advancing internal state. Defaults to
+                                               // false.
     @endcode
 
     Calling `get()` or `next()` while `at_end() == true` is a breach of contract, and is allowed to
@@ -82,12 +117,11 @@ struct is_input_range<
     T,
     std::void_t<
         typename T::output_type,
-        decltype(std::declval<const T&>().get()),
+        decltype(std::declval<T&>().get()),
         decltype(std::declval<const T&>().at_end()),
-        decltype(std::declval<T&>().next()),
-        decltype(T::is_finite)>> : std::true_type {};
+        decltype(std::declval<T&>().next())>> : std::true_type {};
 template <class T>
-constexpr bool is_input_range_v = is_input_range<T>::value;
+constexpr bool is_input_range_v = is_input_range<remove_cvref_t<T>>::value;
 
 /*!
     @brief Sink concept
@@ -112,13 +146,22 @@ constexpr bool is_input_range_v = is_input_range<T>::value;
     @tparam T The sink type.
     @tparam Out The output container type.
 */
-template <class T, class Out, class Enable = void>
+template <class T, class Enable = void>
 struct is_sink : std::false_type {};
-template <class T, class Out>
-struct is_sink<T, Out, std::void_t<decltype(std::declval<T&&>().sink(std::declval<Out&>()))>>
+// Test whether T is a sink by checking that it has `T::output_type` and an implementation of
+// `sink()` that accepts an `std::vector<T::output_type>&` as its argument.
+template <class T>
+struct is_sink<
+    T,
+    std::void_t<decltype(std::declval<T&&>().sink(
+        std::declval<std::vector<typename remove_cvref_t<T>::output_type>&>()))>>
     : std::true_type {};
-template <class T, class Out>
-constexpr bool is_sink_v = is_sink<T, Out>::value;
+template <class T>
+constexpr bool is_sink_v = is_sink<remove_cvref_t<T>>::value;
+
+template <class T>
+constexpr bool is_input_or_sink_v = is_input_range_v<T> || is_sink_v<T>;
+
 
 template <class T, class Enable = void>
 struct has_reserve : std::false_type {};
@@ -126,7 +169,7 @@ template <class T>
 struct has_reserve<T, std::void_t<decltype(std::declval<T&>().reserve(std::declval<size_t>()))>>
     : std::true_type {};
 template <class T>
-constexpr bool has_reserve_v = has_reserve<T>::value;
+constexpr bool has_reserve_v = has_reserve<remove_cvref_t<T>>::value;
 
 template <class T, class Enable = void>
 struct has_emplace_back : std::false_type {};
@@ -136,7 +179,7 @@ struct has_emplace_back<
     std::void_t<decltype(std::declval<T&>().emplace_back(
         std::declval<typename T::value_type&&>()))>> : std::true_type {};
 template <class T>
-constexpr bool has_emplace_back_v = has_emplace_back<T>::value;
+constexpr bool has_emplace_back_v = has_emplace_back<remove_cvref_t<T>>::value;
 
 template <class T, class Enable = void>
 struct has_push_back : std::false_type {};
@@ -146,7 +189,7 @@ struct has_push_back<
     std::void_t<decltype(std::declval<T&>().push_back(std::declval<typename T::value_type&&>()))>>
     : std::true_type {};
 template <class T>
-constexpr bool has_push_back_v = has_push_back<T>::value;
+constexpr bool has_push_back_v = has_push_back<remove_cvref_t<T>>::value;
 
 template <class T, class Enable = void>
 struct has_emplace : std::false_type {};
@@ -156,30 +199,33 @@ struct has_emplace<
     std::void_t<decltype(std::declval<T&>().emplace(std::declval<typename T::value_type&&>()))>>
     : std::true_type {};
 template <class T>
-constexpr bool has_emplace_v = has_emplace<T>::value;
+constexpr bool has_emplace_v = has_emplace<remove_cvref_t<T>>::value;
 
-template <class T>
-struct is_tuple : std::false_type {};
-template <class... Tx>
-struct is_tuple<std::tuple<Tx...>> : std::true_type {};
-template <class T, class U>
-struct is_tuple<std::pair<T, U>> : std::true_type {};
-template <class T>
-constexpr bool is_tuple_v = is_tuple<T>::value;
-
+// True if `std::tuple_size<T>::value` is defined.
 template <class T, class Enable = void>
-struct has_std_get_0_1 : std::false_type {};
+struct is_tuple_like : std::false_type {};
 template <class T>
-struct has_std_get_0_1<
-    T,
-    std::void_t<
-        decltype(std::get<0>(std::declval<const T&>())),
-        decltype(std::get<1>(std::declval<const T&>()))>> : std::true_type {};
+struct is_tuple_like<T, std::void_t<decltype(std::tuple_size<T>::value)>> : std::true_type {};
 template <class T>
-constexpr bool has_std_get_0_1_v = has_std_get_0_1<T>::value;
+constexpr bool is_tuple_like_v = is_tuple_like<remove_cvref_t<T>>::value;
 
+// Trait for input ranges to indicate whether they output a finite number of elements.
+template <class T, class Enable = void>
+struct is_finite : std::false_type {};
 template <class T>
-struct is_finite : std::bool_constant<T::is_finite> {};
+struct is_finite<T, std::void_t<decltype(T::is_finite)>> : std::bool_constant<T::is_finite> {};
+template <class T>
+constexpr bool is_finite_v = is_finite<remove_cvref_t<T>>::value;
+
+// Trait for input ranges to indicate whether their `get()` function can be called multiple times
+// without advancing internal state.
+template <class T, class Enable = void>
+struct is_idempotent : std::false_type {};
+template <class T>
+struct is_idempotent<T, std::void_t<decltype(T::is_idempotent)>>
+    : std::bool_constant<T::is_idempotent> {};
+template <class T>
+constexpr bool is_idempotent_v = is_idempotent<remove_cvref_t<T>>::value;
 
 // Fake RandomAccessIterator concept. Any iterator that supports advancing by an arbitrary integer
 // amount is considered "random access".
@@ -191,26 +237,12 @@ struct is_random_access_iterator<T, std::void_t<decltype(std::declval<T&>() += 1
 template <class T>
 constexpr bool is_random_access_iterator_v = is_random_access_iterator<T>::value;
 
-/// Idempotent conversion of rvalue InputRange to InputRange.
-template <class R>
-[[nodiscard]] constexpr decltype(auto) as_input_range(
-    R&& range,
-    std::enable_if_t<is_input_range_v<RX_REMOVE_CVREF_T<R>>>* = nullptr) noexcept {
-    return std::forward<R>(range);
-}
-
 /// Convenience notation for chaining ranges.
 ///
-/// Note: This operator just calles `rhs(lhs)` through `operator()`, and as such will apply to
-/// any objects where the right-hand side is callable with the left-hand side as an argument.
-///
-/// Typically this is used to chain input ranges and sinks, but will also apply to the
-/// following:
-///
-/// @code
-/// std::string s = 123 | [](int x) { return std::to_string(x); };
-/// // s == "123"
-/// @endcode
+/// Note that this enables `operator|` for any pair where RHS is callable with LHS as its only
+/// argument. Therefore, it may be best to selectively import this operator into your scope with
+/// `using`. If it simply cannot be imported without clashing with other definitions of `operator|`,
+/// you can use the alternative chaining syntax using `operator()`: `rhs(lhs)`.
 template <
     class LHS,
     class RHS,
@@ -219,6 +251,9 @@ constexpr auto operator|(LHS&& lhs, RHS&& rhs) noexcept {
     return std::forward<RHS>(rhs)(std::forward<LHS>(lhs));
 }
 
+/*!
+    @brief Convert input range or sink to standard iterators.
+*/
 struct input_range_iterator_end {};
 template <class R>
 struct input_range_iterator {
@@ -226,15 +261,11 @@ struct input_range_iterator {
     template <class Arg>
     constexpr explicit input_range_iterator(Arg&& range) noexcept
         : range(std::forward<Arg>(range)) {}
-    constexpr input_range_iterator(input_range_iterator&&) noexcept = default;
-    constexpr input_range_iterator(const input_range_iterator&) noexcept = default;
-    constexpr input_range_iterator& operator=(input_range_iterator&&) noexcept = default;
-    constexpr input_range_iterator& operator=(const input_range_iterator&) noexcept = default;
 
-    constexpr bool operator==(input_range_iterator_end) const {
+    constexpr bool operator==(input_range_iterator_end) const noexcept {
         return range.at_end();
     }
-    constexpr bool operator!=(input_range_iterator_end) const {
+    constexpr bool operator!=(input_range_iterator_end) const noexcept {
         return !range.at_end();
     }
 
@@ -247,22 +278,22 @@ struct input_range_iterator {
     [[nodiscard]] constexpr decltype(auto) operator*() const noexcept {
         return range.get();
     }
-    template <class T = typename R::output_type, class = std::enable_if_t<std::is_lvalue_reference_v<T>>>
-    [[nodiscard]] constexpr auto operator->() const noexcept {
+    template <
+        class T = typename R::output_type,
+        class = std::enable_if_t<std::is_lvalue_reference_v<T>>>
+    [[nodiscard]] constexpr auto operator-> () const noexcept {
         return &range.get();
     }
 };
 template <class R>
-input_range_iterator(R &&)->input_range_iterator<RX_REMOVE_CVREF_T<R>>;
+input_range_iterator(R &&)->input_range_iterator<remove_cvref_t<R>>;
 
-template <class R>
-[[nodiscard]] constexpr auto
-begin(R&& range, std::enable_if_t<is_input_range_v<RX_REMOVE_CVREF_T<R>>>* = nullptr) noexcept {
-    return input_range_iterator{as_input_range(std::forward<R>(range))};
+template <class R, class = std::enable_if_t<is_input_or_sink_v<R>>>
+[[nodiscard]] constexpr auto begin(R&& range) noexcept {
+    return input_range_iterator(as_input_range(std::forward<R>(range)));
 }
-template <class R>
-[[nodiscard]] constexpr auto
-end(const R&, std::enable_if_t<is_input_range_v<R>>* = nullptr) noexcept {
+template <class R, class = std::enable_if_t<is_input_or_sink_v<R>>>
+[[nodiscard]] constexpr auto end(const R&) noexcept {
     // Note: The first argument may be moved-from, but that's OK, we just need its type.
     return input_range_iterator_end{};
 }
@@ -274,16 +305,26 @@ namespace detail {
 
 /// Copy elements from an rvalue InputRange to output.
 ///
+/// If an input range is chained with a sink (like `sort()`), this will the initial population of
+/// the output, on which any further "sink" operators (like `uniq()`) will operate.
+///
+/// This function only participates in overload resolution if @a in is an rvalue reference. This is
+/// to provide a compile-time check for reentrancy -- `sink()` should never advance the state of an
+/// input range that may later be reused by the caller.
+///
+/// Note: As of C++17, no standard container can actually allocate memory in a `constexpr` context,
+///       but this was added in C++20. This is the only reason that this function is marked
+///       `constexpr`. See: http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2019/p0784r5.html
+///
 /// @tparam In The range to copy from.
 /// @tparam Out A container that can hold the result.
 template <class In, class Out>
 constexpr void sink(
     In&& in,
     Out& out,
-    std::enable_if_t<!std::is_lvalue_reference_v<In> && is_input_range_v<RX_REMOVE_CVREF_T<In>>>* =
-        nullptr) noexcept {
-    RX_TYPE_ASSERT(is_finite<RX_REMOVE_CVREF_T<In>>);
-    using output_type = RX_REMOVE_CVREF_T<typename RX_REMOVE_CVREF_T<In>::output_type>;
+    std::enable_if_t<!std::is_lvalue_reference_v<In> && is_input_range_v<In>>* = nullptr) noexcept {
+    RX_TYPE_ASSERT(is_finite<remove_cvref_t<In>>);
+    using output_type = typename remove_cvref_t<In>::output_type;
 
     if constexpr (has_reserve_v<Out>) {
         out.reserve(in.size_hint());
@@ -292,13 +333,20 @@ constexpr void sink(
     // Copy elements from the input to the output. If the input is tuple-like, and the output
     // supports emplacement, the tuple will be unpacked and passed as individual arguments to the
     // emplace member function on the output. Otherwise, the tuple-like object will be passed as-is.
+    //
+    // This means that both linear containers of tuples and associative containers like maps will
+    // work as outputs.
 
-    while (!in.at_end()) {
+    static_assert(
+        has_emplace_back_v<Out> || has_push_back_v<Out> || has_emplace_v<Out>,
+        "Output supports neither emplace_back(), push_back(), nor emplace().");
+
+    while (RX_LIKELY(!in.at_end())) {
         if constexpr (has_emplace_back_v<Out>) {
-            if constexpr (is_tuple_v<output_type>) {
+            if constexpr (is_tuple_like_v<output_type>) {
                 // Output has emplace_back, and the input generates tuple-like elements. Pass tuple
                 // elements as individual arguments to emplace_back.
-                auto unpack = [&](auto&&... args) {
+                auto unpack = [&](auto&&... args) constexpr {
                     out.emplace_back(std::forward<decltype(args)>(args)...);
                 };
                 std::apply(unpack, in.get());
@@ -308,10 +356,10 @@ constexpr void sink(
         } else if constexpr (has_push_back_v<Out>) {
             out.push_back(in.get());
         } else if constexpr (has_emplace_v<Out>) {
-            if constexpr (is_tuple_v<output_type>) {
+            if constexpr (is_tuple_like_v<output_type>) {
                 // Output has emplace, and the input generates tuple-like elements. Pass tuple
                 // elements as individual arguments to emplace.
-                auto unpack = [&](auto&&... args) {
+                auto unpack = [&](auto&&... args) constexpr {
                     out.emplace(std::forward<decltype(args)>(args)...);
                 };
                 std::apply(unpack, in.get());
@@ -319,21 +367,16 @@ constexpr void sink(
                 out.emplace(in.get());
             }
         }
-        // else if constexpr (!std::is_same_v<Out, detail::invalid_type<output_type>>) {
-        //     static_assert(
-        //         std::is_same_v<Out, detail::invalid_type<output_type>>, "Output supports neither
-        //         emplace_back(), push_back(), nor emplace().");
-        // }
 
         in.next();
     }
 }
 
-/// Copy elements from an lvalue InputRange to sink with push_into().
-template <class In, class Out>
-constexpr void
-sink(const In& in, Out& out, std::enable_if_t<is_input_range_v<In>>* = nullptr) noexcept {
-    In copy = in;
+/// Copy elements from an lvalue InputRange to sink. Note that the input range is copied to maintain
+/// reentrancy.
+template <class In, class Out, class = std::enable_if_t<is_input_range_v<In>>>
+constexpr void sink(const In& in, Out& out) noexcept {
+    auto copy = in;
     sink(std::move(copy), out);
 }
 
@@ -344,12 +387,12 @@ sink(const In& in, Out& out, std::enable_if_t<is_input_range_v<In>>* = nullptr) 
 ///
 /// @tparam In The sink to copy from, typically an output modifier like `sort` or `uniq`.
 /// @tparam Out A container that can hold the result.
-template <class In, class Out>
-constexpr void sink(
-    In&& in,
-    Out& out,
-    std::enable_if_t<!std::is_lvalue_reference_v<In> && is_sink_v<RX_REMOVE_CVREF_T<In>, Out>>* =
-        nullptr) noexcept {
+template <
+    class In,
+    class Out,
+    class = std::enable_if_t<is_sink_v<In>>,
+    class = std::enable_if_t<!std::is_lvalue_reference_v<In>>>
+constexpr void sink(In&& in, Out& out) noexcept {
     std::move(in).sink(out);
 }
 
@@ -358,23 +401,26 @@ constexpr void sink(
 /// Note: This function should not be called from a Sink's implementation of `sink(out)`. Instead,
 /// call `sink(std::move(inner), out)` to avoid unnecessary copies.
 template <class In, class Out>
-constexpr void
-sink(const In& in, Out& out, std::enable_if_t<is_sink_v<In, Out>>* = nullptr) noexcept {
+constexpr void sink(const In& in, Out& out, std::enable_if_t<is_sink_v<In>>* = nullptr) noexcept {
     In copy = in;
-    sink(std::move(copy), out, nullptr);
+    sink(std::move(copy), out);
 }
 
 /// Copy elements from a standard container into a sink.
 template <class In, class Out>
-constexpr void sink(
-    const In& in,
-    Out& out,
-    std::enable_if_t<!is_sink_v<In, Out> && !is_input_range_v<In>>* = nullptr) noexcept {
+constexpr void
+sink(const In& in, Out& out, std::enable_if_t<!is_input_or_sink_v<In>>* = nullptr) noexcept {
     std::copy(begin(in), end(in), std::back_inserter(out));
 }
 
+/*!
+    @brief Create a range from a standard iterator pair, or a standard container.
+
+    @tparam It The type of the iterator that will be incremented.
+    @tparam EndIt The type of the end iterator, if it is different from `It`.
+*/
 template <class It, class EndIt = It>
-struct IteratorRange {
+struct iterator_range {
     using iterator_type = It;
     using end_iterator_type = EndIt;
     using output_type = decltype(*std::declval<const iterator_type&>());
@@ -382,14 +428,15 @@ struct IteratorRange {
     // TODO: If the end-iterator type is different from the iterator type, this may not produce
     // a finite range.
     static constexpr bool is_finite = true;
+    static constexpr bool is_idempotent = true; // we only operate on const iterators
 
     It current_;
     EndIt end_;
 
     template <class C>
-    constexpr explicit IteratorRange(const C& collection) noexcept
+    constexpr explicit iterator_range(const C& collection) noexcept
         : current_(begin(collection)), end_(end(collection)) {}
-    constexpr IteratorRange(It begin, EndIt end) noexcept : current_(begin), end_(end) {}
+    constexpr iterator_range(It begin, EndIt end) noexcept : current_(begin), end_(end) {}
 
     constexpr void next() noexcept {
         RX_ASSERT(current_ != end_);
@@ -405,50 +452,40 @@ struct IteratorRange {
     constexpr size_t size_hint() const noexcept {
         if constexpr (std::is_same_v<It, EndIt> && is_random_access_iterator_v<It>) {
             return end_ - current_;
+        } else {
+            return 0;
         }
-        return 0;
     }
 };
 template <class C>
-IteratorRange(const C& c)->IteratorRange<decltype(begin(c)), decltype(end(c))>;
+iterator_range(const C& c)->iterator_range<decltype(begin(c)), decltype(end(c))>;
 template <class It, class EndIt>
-IteratorRange(It, EndIt)->IteratorRange<It, EndIt>;
-/// Convert a standard collection to an IteratorRange.
-template <class C>
-[[nodiscard]] constexpr auto as_input_range(
-    const C& collection,
-    std::void_t<decltype(collection.begin()), decltype(collection.end())>* = nullptr) noexcept {
-    return IteratorRange{collection};
-}
+iterator_range(It&&, EndIt &&)->iterator_range<remove_cvref_t<It>, remove_cvref_t<EndIt>>;
 
-template <size_t N, class T>
-[[nodiscard]] constexpr auto as_input_range(T (&collection)[N]) noexcept {
-    return IteratorRange{std::begin(collection), std::end(collection)};
-}
+/*!
+    @brief An input range over an internally owned `std::vector`.
 
+    This is used internally when chains require temporary storage (for example, when a sink is
+    used as an input rage).
 
-// Sinks need to be able to indicate their output type, but don't want to actually convert their
-// inputs to input ranges with as_input_range(), because that would allocate temporary storage when
-// chaining sinks.
+    @tparam T The element type of the internal vector. Must be a non-reference value type.
+*/
 template <class T>
-using get_output_type_of_t =
-    typename RX_REMOVE_CVREF_T<decltype(as_input_range(std::declval<T>()))>::output_type;
-
-template <class T>
-struct VectorRange {
-    using output_type = const T&;
+struct vector_range {
+    using output_type = T;
     static constexpr bool is_finite = true;
+    static constexpr bool is_idempotent = true;
     std::vector<T> vector_;
     // Note: Moving a vector does not invalidate iterators.
     typename std::vector<T>::const_iterator current_;
 
-    constexpr explicit VectorRange(std::vector<T> vec) noexcept
+    constexpr explicit vector_range(std::vector<T> vec) noexcept
         : vector_(std::move(vec)), current_(vector_.begin()) {}
-    constexpr VectorRange(VectorRange&&) noexcept = default;
-    constexpr VectorRange(const VectorRange& other) noexcept
+    constexpr vector_range(vector_range&&) noexcept = default;
+    constexpr vector_range(const vector_range& other) noexcept
         : vector_(other.vector_), current_(vector_.begin()) {}
-    constexpr VectorRange& operator=(VectorRange&&) noexcept = default;
-    constexpr VectorRange& operator=(const VectorRange& other) noexcept {
+    constexpr vector_range& operator=(vector_range&&) noexcept = default;
+    constexpr vector_range& operator=(const vector_range& other) noexcept {
         vector_ = other.vector_;
         current_ = vector_.begin();
         return *this;
@@ -457,8 +494,11 @@ struct VectorRange {
         RX_ASSERT(current_ != vector_.end());
         ++current_;
     }
-    constexpr output_type get() const noexcept {
+    constexpr const output_type& get() const& noexcept {
         return *current_;
+    }
+    constexpr output_type get() && noexcept {
+        return std::move(*current_);
     }
     constexpr bool at_end() const noexcept {
         return current_ == vector_.end();
@@ -468,79 +508,203 @@ struct VectorRange {
     }
 };
 
-/// Convert Sink to InputRange by copying elements into temporary storage.
-template <
-    class R,
-    class = std::enable_if_t<
-        !std::is_lvalue_reference_v<
-            R> && is_sink_v<RX_REMOVE_CVREF_T<R>, std::vector<RX_REMOVE_CVREF_T<typename RX_REMOVE_CVREF_T<R>::output_type>>>>>
-[[nodiscard]] constexpr auto as_input_range(R&& range) noexcept {
-    // Store the output in a temporary vector.
-    using output_type = RX_REMOVE_CVREF_T<typename RX_REMOVE_CVREF_T<R>::output_type>;
-    std::vector<output_type> vec;
-    sink(std::move(range), vec);
-    return VectorRange<output_type>{std::move(vec)};
+namespace detail {
+    // This exists only to maintain some sanity in figuring out overload resolution for
+    // as_input_range().
+    struct input_category {
+        struct input_range {};
+        struct sink {};
+        struct other {};
+    };
+
+    template <class, class Enable = void>
+    struct input_category_of {
+        using type = input_category::other;
+    };
+    template <class T>
+    struct input_category_of<T, std::enable_if_t<is_input_range_v<T>>> {
+        using type = input_category::input_range;
+    };
+    template <class T>
+    struct input_category_of<T, std::enable_if_t<is_sink_v<T>>> {
+        using type = input_category::sink;
+    };
+
+    template <class T>
+    using input_category_of_t = typename input_category_of<remove_cvref_t<T>>::type;
+
+    template <class T>
+    constexpr decltype(auto) as_input_range_impl(input_category::input_range, T&& range) noexcept {
+        return std::forward<T>(range);
+    }
+
+    template <class T>
+    constexpr auto as_input_range_impl(input_category::sink, T&& input) noexcept {
+        static_assert(
+            !std::is_lvalue_reference_v<T>,
+            "Please only convert sinks to input ranges with rvalue references (for efficiency).");
+        using RX_NAMESPACE::sink;
+        // Store the output in a temporary vector.
+        using output_type = remove_cvref_t<typename remove_cvref_t<T>::output_type>;
+        std::vector<output_type> vec;
+        sink(std::move(input), vec);
+        return vector_range<output_type>{std::move(vec)};
+    }
+
+    template <class T>
+    constexpr auto as_input_range_impl(input_category::other, const T& container) noexcept {
+        return iterator_range(container.begin(), container.end());
+    }
+
+    template <class T, size_t N>
+    constexpr auto as_input_range_impl(input_category::other, T (&arr)[N]) noexcept {
+        return iterator_range(std::begin(arr), std::end(arr));
+    }
+} // namespace detail
+
+template <class R>
+constexpr decltype(auto) as_input_range(R&& range) {
+    using category = detail::input_category_of_t<R>;
+    return detail::as_input_range_impl(category{}, std::forward<R>(range));
 }
 
 /*!
-    @brief Generic range generator.
+    @brief Wrap an non-idempotent range to make it idempotent.
+
+    Some combinators expect an idempotent input to avoid internal storage unless it is actually
+    needed. This is a convenience wrapper for those combinators, which wraps a non-idempotent
+    combinator.
+
+    Idempotency is achieved by storing the "current" element in internal, temporary storage. For
+    this reason, the output type of `R` must be default-constructible.
+
+    @tparam R The inner (non-idempotent) range.
+*/
+template <class R>
+struct idempotent_range {
+    static_assert(!is_idempotent_v<R>); // Don't wrap an already idempotent range.
+
+    static constexpr bool is_finite = is_finite_v<R>;
+    static constexpr bool is_idempotent = true;
+    using element_type = remove_cvref_t<typename R::output_type>;
+    using output_type = const element_type&;
+
+    R inner_;
+    element_type current_;
+
+    template <class Q>
+    idempotent_range(Q&& inner) : inner_(std::forward<Q>(inner)) {
+        if (!inner_.at_end()) {
+            current_ = inner_.get();
+        }
+    }
+
+    constexpr output_type get() const noexcept {
+        return current_;
+    }
+
+    constexpr void next() noexcept {
+        inner_.next();
+        if (!inner_.at_end()) {
+            current_ = inner_.get();
+        }
+    }
+
+    constexpr bool at_end() const noexcept {
+        return inner_.at_end();
+    }
+
+    constexpr size_t size_hint() const noexcept {
+        return inner_.size_hint();
+    }
+};
+template <class R>
+idempotent_range(R &&)->idempotent_range<remove_cvref_t<R>>;
+
+// Convenience function to make non-idempotent input ranges idempotent.
+template <class R>
+constexpr auto as_idempotent_input_range(R&& range) {
+    // Convert the input to an input range, and then wrap it in idempotent_range if it isn't already
+    // idempotent.
+    auto input_range = as_input_range(std::forward<R>(range));
+    using range_type = decltype(input_range);
+    if constexpr (is_idempotent_v<range_type>) {
+        return input_range;
+    } else {
+        return idempotent_range(std::move(input_range));
+    }
+}
+
+// Get the equivalent range type of some type. This is the return type of `as_input_range()` without
+// cvref-qualifiers when called with T as the argument (which may be any lvalue or rvalue type). The
+// reason that we can't juse use remove_cvref_t<T> is that some inputs may be converted to a
+// different type by `as_input_range()`, such as standard containers.
+template <class T>
+using get_range_type_t = remove_cvref_t<decltype(as_input_range(std::declval<T>()))>;
+
+// Get the output type of T as if it was converted to a range. This is the output type of the input
+// range after conversion through `as_input_range()`.
+template <class T>
+using get_output_type_of_t = typename get_range_type_t<T>::output_type;
+
+/*!
+    @brief Generate a series of values from a function.
 
     Produces an infinite number of outputs, calling F to produce each output.
 
-    Combine with things like \a take or \a until to create a finite range.
+    Combine with things like take(), until(), etc. to create a finite range.
 
-    Note: `generate` is idempotent, i.e. it only calls the function once for each iteration. For
-           this reason, the last return value is stored internally.
+    Note: The function does not have to be idempotent, but subsequent chained combinators may cache
+          the return value if they need idempotency.
 
     @tparam F A function that will be invoked to produce an output.
 */
 template <class F>
 struct generate {
-    using element_type = RX_REMOVE_CVREF_T<decltype(std::declval<F>()())>;
-    using output_type = const element_type&;
+    using output_type = decltype(std::declval<F>()());
     static constexpr bool is_finite = false;
+    static constexpr bool is_idempotent = false;
 
-    F func;
-    element_type cache;
+    mutable F func;
 
-    template <class T>
-    constexpr explicit generate(T&& func) : func(std::forward<T>(func)) {
-        cache = this->func();
-    }
+    template <class Fx>
+    constexpr explicit generate(Fx&& func) : func(std::forward<Fx>(func)) {}
 
-    constexpr void next() noexcept {
-        cache = func();
-    }
+    constexpr void next() noexcept {}
+
     [[nodiscard]] constexpr bool at_end() const noexcept {
         return false;
     }
-    [[nodiscard]] constexpr output_type get() const {
-        return cache;
+
+    [[nodiscard]] constexpr decltype(auto) get() const {
+        return func();
     }
+
     constexpr size_t size_hint() const noexcept {
-        return 0;
+        return std::numeric_limits<size_t>::max();
     }
 };
 template <class F>
-generate(F &&)->generate<RX_REMOVE_CVREF_T<F>>;
+generate(F &&)->generate<remove_cvref_t<F>>;
 
 /*!
-    @brief Sequence generator
+    @brief Sequence generator.
 
-    Create an infinite sequence of T.
+    Create an infinite sequence of T, advancing each iteration by a value of type U.
 
     T is expected to be initializable by an integral constant, and to have well-defined
-    `operator+=(T)`.
+    `operator+=(U)`.
 */
-template <class T>
+template <class T, class U = T>
 struct seq {
     T current;
-    T step;
+    U step;
 
     using output_type = T;
     static constexpr bool is_finite = false;
+    static constexpr bool is_idempotent = true;
 
-    constexpr explicit seq(T init = 0, T step = 1) : current(init), step(step) {}
+    constexpr explicit seq(T init = T{}, U step = U{} + 1) : current(init), step(step) {}
 
     constexpr void next() {
         current += step;
@@ -552,14 +716,14 @@ struct seq {
         return false;
     }
     constexpr size_t size_hint() const noexcept {
-        return 0;
+        return std::numeric_limits<size_t>::max();
     }
 };
 seq()->seq<int>;
 template <class T>
 seq(T)->seq<T>;
-template <class T>
-seq(T, T)->seq<T>;
+template <class T, class U>
+seq(T, U)->seq<T, U>;
 
 /*!
     @brief Generate infinite copies of type T.
@@ -571,15 +735,20 @@ struct repeat {
 
     using output_type = T;
     static constexpr bool is_finite = false;
+    static constexpr bool is_idempotent = true;
+
     constexpr void next() {}
+
     [[nodiscard]] constexpr output_type get() const {
         return value;
     }
+
     [[nodiscard]] constexpr bool at_end() const noexcept {
         return false;
     }
+
     constexpr size_t size_hint() const noexcept {
-        return 0;
+        return std::numeric_limits<size_t>::max();
     }
 };
 template <class T>
@@ -597,8 +766,9 @@ template <class T>
 */
 template <class T>
 struct repeat_n {
-    using output_type = T;
+    using output_type = const T&;
     static constexpr bool is_finite = true;
+    static constexpr bool is_idempotent = true;
 
     T value;
     size_t n;
@@ -608,10 +778,10 @@ struct repeat_n {
     constexpr void next() {
         ++i;
     }
-    [[nodiscard]] constexpr output_type get() const {
+    [[nodiscard]] constexpr output_type get() const noexcept {
         return value;
     }
-    [[nodiscard]] constexpr bool at_end() const {
+    [[nodiscard]] constexpr bool at_end() const noexcept {
         return i == n;
     }
     constexpr size_t size_hint() const noexcept {
@@ -622,21 +792,28 @@ template <class T>
 repeat_n(size_t, T &&)->repeat_n<T>;
 
 template <class T>
-[[nodiscard]] constexpr auto fill_n(size_t n, T&& v) {
+[[nodiscard]] constexpr auto fill_n(size_t n, T&& v) noexcept {
     return repeat_n(n, std::forward<T>(v));
 }
 
+/*!
+    @brief Transform a range of values by a function F.
+
+    Each output is produced by passing the output of the inner range to the function F.
+*/
 template <class F>
 struct transform {
     F func;
-    explicit constexpr transform(F func) noexcept : func(std::move(func)) {}
+    template <class Fx>
+    explicit constexpr transform(Fx&& func) noexcept : func(std::forward<Fx>(func)) {}
 
     template <class InputRange>
     struct Range {
         InputRange input_;
         transform transform_;
         using output_type = decltype(std::declval<const F&>()((input_.get())));
-        static constexpr bool is_finite = InputRange::is_finite;
+        static constexpr bool is_finite = is_finite_v<InputRange>;
+        static constexpr bool is_idempotent = is_idempotent_v<InputRange>;
 
         constexpr Range(InputRange input, transform transform) noexcept
             : input_(std::move(input)), transform_(std::move(transform)) {}
@@ -654,107 +831,151 @@ struct transform {
         }
     };
 
+    // Since F may be either cheap or expensive to copy, provide overloads for both const-refs and
+    // rvalue-refs.
+
     template <class InputRange>
     [[nodiscard]] constexpr auto operator()(InputRange&& input) const& noexcept {
-        using Inner = RX_REMOVE_CVREF_T<decltype(as_input_range(std::forward<InputRange>(input)))>;
+        using Inner = get_range_type_t<InputRange>;
         return Range<Inner>{as_input_range(std::forward<InputRange>(input)), *this};
     }
     template <class InputRange>
         [[nodiscard]] constexpr auto operator()(InputRange&& input) && noexcept {
-        using Inner = RX_REMOVE_CVREF_T<decltype(as_input_range(std::forward<InputRange>(input)))>;
+        using Inner = get_range_type_t<InputRange>;
         return Range<Inner>{as_input_range(std::forward<InputRange>(input)), std::move(*this)};
     }
 };
 template <class F>
-transform(F &&)->transform<RX_REMOVE_CVREF_T<F>>;
+transform(F &&)->transform<remove_cvref_t<F>>;
 
-template <class F>
+/*!
+    @brief Filter range by predicate.
+
+    If the predicate returns true, the element will be included in the output. Otherwise, it will
+    not.
+
+    @tparam P A predicate returning a value convertible to bool
+*/
+template <class P>
 struct filter {
-    F pred;
-    constexpr explicit filter(F pred) : pred(std::move(pred)) {}
+    P pred;
+    template <class Q>
+    constexpr explicit filter(Q&& pred) : pred(std::forward<Q>(pred)) {}
 
-    template <class InputRange>
+    template <class R>
     struct Range {
-        InputRange input_;
-        filter filter_;
+        static_assert(is_idempotent_v<R>);
+        using output_type = remove_cvref_t<typename R::output_type>;
+        static constexpr bool is_finite = is_finite_v<R>;
+        static constexpr bool is_idempotent = true;
 
-        using output_type = typename InputRange::output_type;
-        static constexpr bool is_finite = InputRange::is_finite;
+        R input_;
+        P pred_;
 
-        constexpr Range(InputRange input, filter filter)
-            : input_(std::move(input)), filter_(std::move(filter)) {
-            while (!input_.at_end() && !filter_.pred(input_.get())) {
+        template <class Q>
+        constexpr Range(R input, Q&& pred)
+            : input_(std::move(input)), pred_(std::forward<Q>(pred)) {
+            // Skip initial non-matching outputs.
+            while (RX_LIKELY(!input_.at_end()) && !pred_(input_.get())) {
                 input_.next();
             }
         }
-        [[nodiscard]] constexpr output_type get() const noexcept {
+
+        [[nodiscard]] constexpr decltype(auto) get() const& noexcept {
             return input_.get();
         }
-        constexpr void next() noexcept {
-            do {
-                input_.next();
-            } while (!input_.at_end() && !filter_.pred(input_.get()));
+
+        [[nodiscard]] constexpr decltype(auto) get() && noexcept {
+            return input_.get();
         }
+
+        constexpr void next() noexcept {
+            // XXX: For some reason, compilers are not able to merge this loop condition with
+            // conditions on the input range, causing many more branches than necessary. (Tested
+            // with MSVC, Clang, GCC.)
+            //
+            // This means that filter() can be much much slower (4x with Clang/GCC, 10x with MSVC)
+            // in tight loops.
+            input_.next();
+            while (!at_end() && !pred_(input_.get())) {
+                input_.next();
+            }
+        }
+
         [[nodiscard]] constexpr bool at_end() const noexcept {
             return input_.at_end();
         }
+
         [[nodiscard]] constexpr size_t size_hint() const noexcept {
             return input_.size_hint();
         }
     };
 
+    // Since F may be either cheap or expensive to copy, provide overloads for both const-refs and
+    // rvalue-refs.
+
     template <class InputRange>
     [[nodiscard]] constexpr auto operator()(InputRange&& input) const& {
-        using Inner = RX_REMOVE_CVREF_T<decltype(as_input_range(std::forward<InputRange>(input)))>;
-        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), *this};
+        auto inner = as_idempotent_input_range(std::forward<InputRange>(input));
+        using Inner = decltype(inner);
+        return Range<Inner>{std::move(inner), pred};
     }
     template <class InputRange>
     [[nodiscard]] constexpr auto operator()(InputRange&& input) && {
-        using Inner = RX_REMOVE_CVREF_T<decltype(as_input_range(std::forward<InputRange>(input)))>;
-        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), std::move(*this)};
+        auto inner = as_idempotent_input_range(std::forward<InputRange>(input));
+        using Inner = decltype(inner);
+        return Range<Inner>{std::move(inner), std::move(pred)};
     }
 };
 template <class F>
-filter(F &&)->filter<RX_REMOVE_CVREF_T<F>>;
+filter(F &&)->filter<remove_cvref_t<F>>;
 
 /*!
     @brief Create a range that produces at most N elements from the beginning of its input.
 */
 struct take {
-    size_t n;
+    const size_t n;
     constexpr explicit take(size_t n) noexcept : n(n) {}
 
-    template <class InputRange>
+    template <class R>
     struct Range {
-        InputRange input_;
-        size_t i = 0;
-        size_t n;
-        using output_type = typename InputRange::output_type;
+        using output_type = typename R::output_type;
         static constexpr bool is_finite = true;
+        static constexpr bool is_idempotent = is_idempotent_v<R>;
 
-        constexpr Range(InputRange input, size_t n) noexcept : input_(std::move(input)), n(n) {}
+        R inner;
+        const size_t n;
+        size_t i = 0;
+
+        constexpr Range(R inner, size_t n) noexcept : inner(std::move(inner)), n(n) {}
+
         [[nodiscard]] constexpr output_type get() const noexcept {
-            return input_.get();
+            return inner.get();
         }
+
         constexpr void next() noexcept {
-            RX_ASSERT(!input_.at_end());
+            RX_ASSERT(!inner.at_end());
             ++i;
-            input_.next();
+            inner.next();
         }
+
         [[nodiscard]] constexpr bool at_end() const noexcept {
-            return i >= n || input_.at_end();
+            return i == n || inner.at_end();
         }
+
         constexpr size_t size_hint() const noexcept {
             return n;
         }
     };
+
     template <class InputRange>
     [[nodiscard]] constexpr auto operator()(InputRange&& input) const {
-        using Inner = RX_REMOVE_CVREF_T<decltype(as_input_range(std::forward<InputRange>(input)))>;
+        using Inner = get_range_type_t<InputRange>;
         return Range<Inner>{as_input_range(std::forward<InputRange>(input)), n};
     }
 };
 
+/// Alias for `take()`.
 using first_n = take;
 
 /*!
@@ -770,30 +991,35 @@ struct skip_n {
         size_t i_ = 0;
         const size_t n_;
         using output_type = typename InputRange::output_type;
-        static constexpr bool is_finite = InputRange::is_finite;
+        static constexpr bool is_finite = is_finite_v<InputRange>;
+        static constexpr bool is_idempotent = is_idempotent_v<InputRange>;
 
         constexpr Range(InputRange input, size_t n) noexcept : input_(std::move(input)), n_(n) {
-            while (!input_.at_end() && i_ < n_) {
+            while (RX_LIKELY(!input_.at_end() && i_ < n_)) {
                 input_.next();
                 ++i_;
             }
         }
+
         [[nodiscard]] constexpr output_type get() const noexcept {
             return input_.get();
         }
+
         constexpr void next() noexcept {
             input_.next();
         }
+
         constexpr bool at_end() const noexcept {
             return input_.at_end();
         }
+
         constexpr size_t size_hint() const noexcept {
             return input_.size_hint();
         }
     };
     template <class InputRange>
     [[nodiscard]] constexpr auto operator()(InputRange&& input) const {
-        using Inner = RX_REMOVE_CVREF_T<decltype(as_input_range(std::forward<InputRange>(input)))>;
+        using Inner = get_range_type_t<InputRange>;
         return Range<Inner>{as_input_range(std::forward<InputRange>(input)), n};
     }
 };
@@ -802,8 +1028,6 @@ struct skip_n {
     @brief Produce elements from the input until the predicate returns true.
 
     Note: The element for which the predicate returned true is not included in the output.
-
-    Note: If the predicate never returns true, this will loop forever!
 
     @tparam P A predicate function callable with elements of the input as its argument, returning a
               boolean.
@@ -814,83 +1038,100 @@ struct until {
     template <class T>
     constexpr explicit until(T&& pred) : pred(std::forward<T>(pred)) {}
 
-    template <class InputRange>
+    template <class R>
     struct Range {
-        InputRange input;
+        static_assert(is_idempotent_v<R>);
+        using output_type = remove_cvref_t<typename R::output_type>;
+        static constexpr bool is_finite = is_finite_v<R>;
+        static constexpr bool is_idempotent = true;
+
+        R input;
         P pred;
         bool end = false;
 
-        // Temporary storage of the current element of the input is necessary to ensure that the
-        // range is reentrant (since we need to call the predicate in next()).
-        using storage_t = RX_REMOVE_CVREF_T<typename InputRange::output_type>;
-        storage_t storage;
-
-        constexpr Range(InputRange input, P pred) noexcept
-            : input(std::move(input)), pred(std::move(pred)), end(input.at_end()) {
+        template <class Rx, class Px>
+        constexpr Range(Rx&& input, Px&& pred) noexcept
+            : input(std::forward<Rx>(input)), pred(std::forward<Px>(pred)), end(input.at_end()) {
             if (!end) {
-                storage = input.get();
-                end = pred(storage);
+                end = pred(input.get());
             }
         }
-        using output_type = typename InputRange::output_type;
-        static constexpr bool is_finite = true;
-        [[nodiscard]] constexpr output_type get() const noexcept {
+
+        [[nodiscard]] constexpr decltype(auto) get() const& noexcept {
             RX_ASSERT(!end);
-            return storage;
+            return input.get();
         }
+
+        [[nodiscard]] constexpr decltype(auto) get() && noexcept {
+            RX_ASSERT(!end);
+            return input.get();
+        }
+
         constexpr void next() noexcept {
             RX_ASSERT(!end);
             input.next();
             end = input.at_end();
             if (!end) {
-                storage = input.get();
-                end = pred(storage);
+                end = pred(input.get());
             }
         }
+
         [[nodiscard]] constexpr bool at_end() const noexcept {
             return end;
         }
+
         constexpr size_t size_hint() const noexcept {
             return input.size_hint();
         }
     };
 
     template <class InputRange>
-    constexpr auto operator()(InputRange&& input) const {
-        using Inner = RX_REMOVE_CVREF_T<decltype(as_input_range(std::forward<InputRange>(input)))>;
-        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), pred};
+    constexpr auto operator()(InputRange&& input) const& {
+        auto inner = as_idempotent_input_range(std::forward<InputRange>(input));
+        using Inner = decltype(inner);
+        return Range<Inner>{std::move(inner), pred};
+    }
+
+    template <class InputRange>
+    constexpr auto operator()(InputRange&& input) && {
+        auto inner = as_idempotent_input_range(std::forward<InputRange>(input));
+        using Inner = decltype(inner);
+        return Range<Inner>{std::move(inner), std::move(pred)};
     }
 };
 template <class P>
-until(P &&)->until<RX_REMOVE_CVREF_T<P>>;
+until(P &&)->until<remove_cvref_t<P>>;
 
 template <class... Inputs>
 struct ZipRange {
-    std::tuple<Inputs...> inputs;
-    using output_type = std::tuple<RX_REMOVE_CVREF_T<typename Inputs::output_type>...>;
-    static constexpr bool is_finite = (false || ... || Inputs::is_finite);
+    static_assert(sizeof...(Inputs) > 0);
 
-    constexpr explicit ZipRange(Inputs... args) : inputs(std::move(args)...) {}
+    std::tuple<Inputs...> inputs;
+    using output_type = std::tuple<remove_cvref_t<typename Inputs::output_type>...>;
+    static constexpr bool is_finite = (is_finite_v<Inputs> || ...);
+    static constexpr bool is_idempotent = (is_idempotent_v<Inputs> && ...);
+
+    template <class... Tx>
+    constexpr explicit ZipRange(std::tuple<Tx...>&& tuple) : inputs(tuple) {}
 
     [[nodiscard]] constexpr output_type get() const noexcept {
-        return output_type(std::get<Inputs>(inputs).get()...);
+        return output_type(std::forward_as_tuple(std::get<Inputs>(inputs).get()...));
     }
 
     constexpr void next() noexcept {
-        int unused[] = {(std::get<Inputs>(inputs).next(), 0)..., 0};
-        static_cast<void>(unused);
+        (std::get<Inputs>(inputs).next(), ...);
     }
 
     [[nodiscard]] constexpr bool at_end() const noexcept {
-        return (false || ... || std::get<Inputs>(inputs).at_end());
+        return (std::get<Inputs>(inputs).at_end() || ...);
     }
 
     constexpr size_t size_hint() const noexcept {
-        return std::max({std::get<Inputs>(inputs).size_hint()...});
+        return std::min({std::get<Inputs>(inputs).size_hint()...});
     }
 };
 template <class... Inputs>
-ZipRange(Inputs&&...)->ZipRange<RX_REMOVE_CVREF_T<Inputs>...>;
+ZipRange(std::tuple<Inputs...> &&)->ZipRange<remove_cvref_t<Inputs>...>;
 
 /*!
     @brief Zip two or more ranges.
@@ -902,7 +1143,22 @@ ZipRange(Inputs&&...)->ZipRange<RX_REMOVE_CVREF_T<Inputs>...>;
 */
 template <class... Inputs>
 [[nodiscard]] constexpr auto zip(Inputs&&... inputs) noexcept {
-    return ZipRange(as_input_range(std::forward<Inputs>(inputs))...);
+    // For some reason, argument deduction doesn't work here.
+    return ZipRange(std::forward_as_tuple(as_input_range(std::forward<Inputs>(inputs))...));
+}
+
+/*!
+    @brief Enumerate elements of the input sequentially.
+
+    Equivalent to `zip(seq(), inputs...)`.
+
+    The inputs are not required to produce the same number of elements, but elements will only be
+    produced until one of the ranges reaches its end.
+*/
+template <class... Inputs>
+[[nodiscard]] constexpr auto enumerate(Inputs&&... inputs) noexcept {
+    return ZipRange(
+        std::forward_as_tuple(seq<size_t>(), as_input_range(std::forward<Inputs>(inputs))...));
 }
 
 template <size_t...>
@@ -924,9 +1180,10 @@ struct in_groups_of_exactly<N> {
     template <class R>
     struct Range {
         R inner;
-        using element_type = RX_REMOVE_CVREF_T<typename R::output_type>;
+        using element_type = remove_cvref_t<typename R::output_type>;
         using output_type = std::array<element_type, N>&&;
-        static constexpr bool is_finite = R::is_finite;
+        static constexpr bool is_finite = is_finite_v<R>;
+        static constexpr bool is_idempotent = true; // we have internal storage
 
         constexpr explicit Range(R inner) : inner(std::move(inner)) {
             fill_group();
@@ -955,19 +1212,23 @@ struct in_groups_of_exactly<N> {
             // Fill from the current position, but don't increment into the next group.
             size_t i = 0;
             while (true) {
-                if (inner.at_end())
+                if (RX_LIKELY(!inner.at_end())) {
+                    storage[i++] = inner.get();
+                    if (RX_LIKELY(i != N)) {
+                        inner.next();
+                    } else {
+                        return;
+                    }
+                } else {
                     return;
-                storage[i++] = inner.get();
-                if (i == N)
-                    return;
-                inner.next();
+                }
             }
         }
     };
 
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& input) const {
-        using Inner = RX_REMOVE_CVREF_T<decltype(as_input_range(std::forward<R>(input)))>;
+        using Inner = get_range_type_t<R>;
         return Range<Inner>{as_input_range(std::forward<R>(input))};
     }
 };
@@ -989,9 +1250,10 @@ struct in_groups_of_exactly<> {
 
     template <class R>
     struct Range {
-        using element_type = RX_REMOVE_CVREF_T<typename R::output_type>;
+        using element_type = remove_cvref_t<typename R::output_type>;
         using output_type = const std::vector<element_type>&;
-        static constexpr bool is_finite = R::is_finite;
+        static constexpr bool is_finite = is_finite_v<R>;
+        static constexpr bool is_idempotent = true; // we have internal storage
 
         R inner;
         const size_t n;
@@ -1024,24 +1286,28 @@ struct in_groups_of_exactly<> {
             storage.clear(); // recycle the vector
             // Fill from the current position, but don't increment into the next group.
             while (true) {
-                if (inner.at_end())
+                if (RX_LIKELY(!inner.at_end())) {
+                    storage.emplace_back(inner.get());
+                    if (RX_LIKELY(storage.size() != n)) {
+                        inner.next();
+                    } else {
+                        return;
+                    }
+                } else {
                     return;
-                storage.emplace_back(inner.get());
-                if (storage.size() == n)
-                    return;
-                inner.next();
+                }
             }
         }
     };
 
     template <class R>
     [[nodiscard]] auto operator()(R&& input) const {
-        using Inner = RX_REMOVE_CVREF_T<decltype(as_input_range(std::forward<R>(input)))>;
+        using Inner = get_range_type_t<R>;
         return Range<Inner>{as_input_range(std::forward<R>(input)), n};
     }
 };
 
-in_groups_of_exactly(size_t) -> in_groups_of_exactly<>;
+in_groups_of_exactly(size_t)->in_groups_of_exactly<>;
 
 /*!
     @brief Produce sequential groups of N or fewer elements.
@@ -1063,9 +1329,10 @@ struct in_groups_of {
 
     template <class R>
     struct Range {
-        using element_type = RX_REMOVE_CVREF_T<typename R::output_type>;
+        using element_type = remove_cvref_t<typename R::output_type>;
         using output_type = const std::vector<element_type>&;
-        static constexpr bool is_finite = R::is_finite;
+        static constexpr bool is_finite = is_finite_v<R>;
+        static constexpr bool is_idempotent = true; // we have internal storage
 
         R inner;
         std::vector<element_type> storage;
@@ -1073,11 +1340,11 @@ struct in_groups_of {
         bool end = false;
 
         Range(R inner, size_t n) : inner(std::move(inner)), n(n) {
-            if (this->inner.at_end()) {
-                end = true;
-            } else {
+            if (RX_LIKELY(!this->inner.at_end())) {
                 storage.reserve(n);
                 fill_group();
+            } else {
+                end = true;
             }
         }
 
@@ -1109,19 +1376,25 @@ struct in_groups_of {
             storage.emplace_back(inner.get());
             inner.next();
             while (true) {
+                if (RX_LIKELY(!inner.at_end())) {
+                    if (RX_LIKELY(storage.size() != n)) {
+                        storage.emplace_back(inner.get());
+                        inner.next();
+                    } else {
+                        return;
+                    }
+                } else {
+                    return;
+                }
                 if (inner.at_end())
                     return;
-                if (storage.size() == n)
-                    return;
-                storage.emplace_back(inner.get());
-                inner.next();
             }
         }
     };
 
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& input) const {
-        using Inner = RX_REMOVE_CVREF_T<decltype(as_input_range(std::forward<R>(input)))>;
+        using Inner = get_range_type_t<R>;
         return Range<Inner>{as_input_range(std::forward<R>(input)), n};
     }
 };
@@ -1137,33 +1410,38 @@ struct in_groups_of {
     @tparam P The discriminant function. When the return value of this function changes, according
               to Compare, a new group is emitted.
     @tparam Compare The compare function used to compare return values of P.
+    @tparam group_size_hint A hint about the average group size. It is 8 by default (somewhat
+                            arbitrarily). If smaller or larger groups are expected, this parameter
+                            can be tuned to avoid either preallocating too little or too much,
+                            respectively, when outputting to a sink that supports `reserve()`.
 */
-template <class P, class Compare = std::equal_to<void>>
-struct group_adjacent_by {
+template <class P, class Compare = std::equal_to<void>, size_t group_size_hint = 8>
+struct group_adjacent_by : private Compare {
     P pred;
-    Compare cmp;
     template <class T, class C>
-    constexpr explicit group_adjacent_by(T&& pred, C&& cmp) : pred(std::forward<T>(pred)), cmp(std::forward<C>(cmp)) {}
+    constexpr explicit group_adjacent_by(T&& pred, C&& cmp)
+        : Compare(std::forward<C>(cmp)), pred(std::forward<T>(pred)) {}
     template <class T>
     constexpr explicit group_adjacent_by(T&& pred) : pred(std::forward<T>(pred)) {}
 
     template <class R>
-    struct Range {
-        using element_type = RX_REMOVE_CVREF_T<typename R::output_type>;
+    struct Range : private Compare {
+        using element_type = remove_cvref_t<typename R::output_type>;
         using output_type = const std::vector<element_type>&;
-        static constexpr bool is_finite = R::is_finite;
+        static constexpr bool is_finite = is_finite_v<R>;
+        static constexpr bool is_idempotent = true; // we have internal storage
 
         R inner;
         P pred;
-        Compare cmp;
         std::vector<element_type> storage;
         bool end = false;
 
-        Range(R inner, P pred, Compare cmp) : inner(std::move(inner)), pred(std::move(pred)), cmp(std::move(cmp)) {
-            if (this->inner.at_end()) {
-                end = true;
-            } else {
+        Range(R inner, P pred, Compare cmp)
+            : Compare(std::move(cmp)), inner(std::move(inner)), pred(std::move(pred)) {
+            if (RX_LIKELY(!this->inner.at_end())) {
                 fill_group();
+            } else {
+                end = true;
             }
         }
 
@@ -1176,15 +1454,22 @@ struct group_adjacent_by {
         }
 
         void next() noexcept {
-            if (inner.at_end()) {
-                end = true;
-            } else {
+            if (RX_LIKELY(!inner.at_end())) {
                 fill_group();
+            } else {
+                end = true;
             }
         }
 
         [[nodiscard]] size_t size_hint() const noexcept {
-            return 0;
+            // It's impossible to say how many groups we will produce, but we can take a guess.
+            // Somewhat arbitrarily, we just assume that we will produce groups of about 8.
+            if constexpr (R::is_finite) {
+                const size_t n = inner.size_hint();
+                return n / group_size_hint + 1;
+            } else {
+                return std::numeric_limits<size_t>::max();
+            }
         }
 
         void fill_group() {
@@ -1199,13 +1484,16 @@ struct group_adjacent_by {
             auto p = pred(current);
             storage.emplace_back(inner.get()); // potentially move
             inner.next();
+            const Compare& cmp = *this;
             while (true) {
-                if (inner.at_end())
-                    return;
-                const auto& q = inner.get(); // lifetime extension for value types
-                if (cmp(p, pred(q))) {
-                    storage.emplace_back(inner.get()); // potentially move
-                    inner.next();
+                if (RX_LIKELY(!inner.at_end())) {
+                    const auto& q = inner.get();           // lifetime extension for value types
+                    if (RX_LIKELY(cmp(p, pred(q)))) {      // optimize for group size > 1
+                        storage.emplace_back(inner.get()); // potentially move
+                        inner.next();
+                    } else {
+                        return;
+                    }
                 } else {
                     return;
                 }
@@ -1215,28 +1503,16 @@ struct group_adjacent_by {
 
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& input) const {
-        using Inner = RX_REMOVE_CVREF_T<decltype(as_input_range(std::forward<R>(input)))>;
+        using Inner = get_range_type_t<R>;
+        const Compare& cmp = *this;
         return Range<Inner>{as_input_range(std::forward<R>(input)), pred, cmp};
     }
 };
 
 template <class P>
-group_adjacent_by(P&&) -> group_adjacent_by<RX_REMOVE_CVREF_T<P>>;
+group_adjacent_by(P &&)->group_adjacent_by<remove_cvref_t<P>>;
 template <class P, class Compare>
-group_adjacent_by(P&&, Compare&&) -> group_adjacent_by<RX_REMOVE_CVREF_T<P>, RX_REMOVE_CVREF_T<Compare>>;
-
-/*!
-    @brief Enumerate elements of the input sequentially.
-
-    Equivalent to `zip(seq(), inputs...)`.
-
-    The inputs are not required to produce the same number of elements, but elements will only be
-    produced until one of the ranges reaches its end.
-*/
-template <class... Inputs>
-[[nodiscard]] constexpr auto enumerate(Inputs&&... inputs) noexcept {
-    return ZipRange(seq(), as_input_range(std::forward<Inputs>(inputs))...);
-}
+group_adjacent_by(P&&, Compare &&)->group_adjacent_by<remove_cvref_t<P>, remove_cvref_t<Compare>>;
 
 /*!
     @brief Sink element(s) into an optional.
@@ -1248,7 +1524,7 @@ template <class... Inputs>
 struct to_opt {
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& input) noexcept {
-        RX_OPTIONAL<RX_REMOVE_CVREF_T<typename R::output_type>> result;
+        RX_OPTIONAL<get_output_type_of_t<R>> result;
         sink(std::forward<R>(input), result);
         return result;
     }
@@ -1263,14 +1539,14 @@ struct to_opt {
 struct first {
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& input) const {
-        return input | take(1) | to_opt();
+        return to_opt()(take(1)(std::forward<R>(input)));
     }
 };
 
 struct to_vector {
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& range) const {
-        std::vector<RX_REMOVE_CVREF_T<get_output_type_of_t<R>>> vec;
+        std::vector<remove_cvref_t<get_output_type_of_t<R>>> vec;
         sink(std::forward<R>(range), vec);
         return vec;
     }
@@ -1282,7 +1558,7 @@ struct to_vector {
 struct to_list {
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& range) const {
-        std::list<RX_REMOVE_CVREF_T<get_output_type_of_t<R>>> list;
+        std::list<remove_cvref_t<get_output_type_of_t<R>>> list;
         sink(std::forward<R>(range), list);
         return list;
     }
@@ -1301,9 +1577,10 @@ struct to_map {
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& range) const {
         using output_type = get_output_type_of_t<R>;
-        using key_type = RX_REMOVE_CVREF_T<std::tuple_element_t<0, output_type>>;
-        using value_type = RX_REMOVE_CVREF_T<std::tuple_element_t<1, output_type>>;
+        using key_type = remove_cvref_t<std::tuple_element_t<0, output_type>>;
+        using value_type = remove_cvref_t<std::tuple_element_t<1, output_type>>;
         std::map<key_type, value_type> result;
+        // Note: Sink only modifies the input if it actually is an rvalue reference.
         sink(std::forward<R>(range), result);
         return result;
     }
@@ -1315,8 +1592,9 @@ struct to_map {
 struct to_set {
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& range) const {
-        using output_type = RX_REMOVE_CVREF_T<get_output_type_of_t<R>>;
+        using output_type = remove_cvref_t<get_output_type_of_t<R>>;
         std::set<output_type> result;
+        // Note: Sink only modifies the input if it actually is an rvalue reference.
         sink(std::forward<R>(range), result);
         return result;
     }
@@ -1328,11 +1606,12 @@ struct to_set {
 struct count {
     template <class R>
     [[nodiscard]] constexpr size_t operator()(R&& range) const {
-        using range_type = RX_REMOVE_CVREF_T<decltype(as_input_range(std::forward<R>(range)))>;
+        using range_type = remove_cvref_t<decltype(as_input_range(std::forward<R>(range)))>;
         RX_TYPE_ASSERT(is_finite<range_type>);
+        // Copying for reentrancy.
         auto copy = as_input_range(std::forward<R>(range));
         size_t n = 0;
-        while (!copy.at_end()) {
+        while (RX_LIKELY(!copy.at_end())) {
             n += 1;
             copy.next();
         }
@@ -1341,7 +1620,12 @@ struct count {
 };
 
 /*!
-    @brief Fold-left of a range.
+    @brief Binary left-fold of a range.
+
+    Produces a single value created from consecutive calls to the provided function.
+
+    @tparam T The type of the initial value and internal accumulator.
+    @tparam F The
 */
 template <class T, class F>
 struct foldl {
@@ -1354,62 +1638,96 @@ struct foldl {
 
     template <class InputRange>
     constexpr T operator()(InputRange&& input) {
+        // Copying for reentrancy.
         auto copy = as_input_range(std::forward<InputRange>(input));
         RX_TYPE_ASSERT(is_finite<decltype(copy)>);
         T accum = init;
-        while (!copy.at_end()) {
+        if (RX_UNLIKELY(copy.at_end()))
+            return accum;
+        do {
             accum = func(accum, copy.get());
             copy.next();
-        }
+        } while (RX_LIKELY(!copy.at_end()));
         return accum;
     }
 };
 template <class T, class F>
-foldl(T&&, F &&)->foldl<RX_REMOVE_CVREF_T<T>, RX_REMOVE_CVREF_T<F>>;
+foldl(T&&, F &&)->foldl<remove_cvref_t<T>, remove_cvref_t<F>>;
 
+/*!
+    @brief Sum the input range.
+
+    The output type of the input range is required to implement `operator+`.
+*/
 struct sum {
     constexpr sum() noexcept {}
     template <class R>
-    [[nodiscard]] constexpr auto operator()(R&& input) noexcept {
-        using type = get_output_type_of_t<R>;
-        return std::forward<R>(input)
-               | foldl(
-                   type{}, [](type accum, auto&& x) constexpr { return accum + x; });
+    [[nodiscard]] constexpr auto operator()(R&& input) const noexcept {
+        using type = remove_cvref_t<get_output_type_of_t<R>>;
+        // Note: foldl is reentrant.
+        auto folder = foldl(
+            type{}, [](type accum, auto&& x) constexpr { return accum + x; });
+        return std::move(folder)(std::forward<R>(input));
     }
 };
 
-struct max {
+/*!
+    @brief Produce the max value of the input range as an optional.
+
+    If the input is empty, "none" is returned.
+
+    The output type of the input range is compared using an instance of Compare, which is
+    `std::less<void>` by default.
+
+    @tparam Compare The comparison function.
+*/
+template <class Compare = std::less<void>>
+struct max : private Compare {
+    template <class C>
+    constexpr max(C&& cmp) noexcept : Compare(std::forward<C>(cmp)) {}
     constexpr max() noexcept {}
-    template <class R>
-    [[nodiscard]] constexpr auto operator()(R&& input) noexcept {
-        using type = get_output_type_of_t<R>;
-        auto folder = foldl(
-            RX_OPTIONAL<type>{}, [](auto&& accum, auto&& x) constexpr {
-                if (accum) {
-                    return std::max(*accum, x);
-                } else {
-                    return x;
-                }
-            });
-        return std::move(folder)(std::forward<R>(input));
-    }
-};
 
-struct min {
     template <class R>
-    [[nodiscard]] constexpr auto operator()(R&& input) noexcept {
-        using type = RX_REMOVE_CVREF_T<get_output_type_of_t<R>>;
-        auto folder = foldl(
-            RX_OPTIONAL<type>{}, [](auto&& accum, auto&& x) constexpr {
-                if (accum) {
-                    return std::min(*accum, x);
-                } else {
-                    return x;
-                }
-            });
-        return std::move(folder)(std::forward<R>(input));
+    [[nodiscard]] constexpr auto operator()(R&& input) const noexcept {
+        using type = remove_cvref_t<get_output_type_of_t<R>>;
+        if (RX_LIKELY(!input.at_end())) {
+            type first = input.get();
+            input.next();
+            auto folder = foldl(
+                std::move(first), [this](auto&& accum, auto&& x) constexpr {
+                    const Compare& cmp = *this;
+                    return std::max(std::forward<decltype(accum)>(accum), x, cmp);
+                });
+            return RX_OPTIONAL<type>{std::move(folder)(std::forward<R>(input))};
+        } else {
+            return RX_OPTIONAL<type>{}; // none
+        }
     }
 };
+max()->max<>;
+
+template <class Compare = std::less<void>>
+struct min : private Compare {
+    template <class C>
+    constexpr min(C&& cmp) noexcept : Compare(std::forward<C>(cmp)) {}
+    constexpr min() noexcept {}
+
+    template <class R>
+    [[nodiscard]] constexpr auto operator()(R&& input) const noexcept {
+        using type = remove_cvref_t<get_output_type_of_t<R>>;
+        if (RX_LIKELY(!input.at_end())) {
+            auto folder = foldl(
+                type{}, [this](auto&& accum, auto&& x) constexpr {
+                    const Compare& cmp = *this;
+                    return std::min(std::forward<decltype(accum)>(accum), x, cmp);
+                });
+            return RX_OPTIONAL<type>{std::move(folder)(std::forward<R>(input))};
+        } else {
+            return RX_OPTIONAL<type>{}; // none
+        }
+    }
+};
+min()->min<>;
 
 /*!
     @brief Checks if the predicate returns true for any element in the input range.
@@ -1425,9 +1743,10 @@ struct any_of {
 
     template <class R>
     [[nodiscard]] constexpr bool operator()(R&& range) const {
+        // Copying for reentrancy.
         auto copy = as_input_range(std::forward<R>(range));
         RX_TYPE_ASSERT(is_finite<decltype(copy)>);
-        while (!copy.at_end()) {
+        while (RX_LIKELY(!copy.at_end())) {
             if (pred(copy.get())) {
                 return true;
             }
@@ -1453,9 +1772,10 @@ struct all_of {
 
     template <class R>
     [[nodiscard]] constexpr bool operator()(R&& range) {
+        // Copying for reentrancy.
         auto copy = as_input_range(std::forward<R>(range));
         RX_TYPE_ASSERT(is_finite<decltype(copy)>);
-        while (!copy.at_end()) {
+        while (RX_LIKELY(!copy.at_end())) {
             if (!pred(copy.get())) {
                 return false;
             }
@@ -1480,9 +1800,10 @@ struct none_of {
 
     template <class R>
     [[nodiscard]] constexpr bool operator()(R&& range) {
+        // Copying for reentrancy.
         auto copy = as_input_range(std::forward<R>(range));
         RX_TYPE_ASSERT(is_finite<decltype(copy)>);
-        while (!copy.at_end()) {
+        while (RX_LIKELY(!copy.at_end())) {
             if (pred(copy.get())) {
                 return false;
             }
@@ -1508,15 +1829,16 @@ struct for_each {
 
     template <class R>
     constexpr void operator()(R&& range) {
+        // Copying for reentrancy.
         auto copy = as_input_range(std::forward<R>(range));
-        while (!copy.at_end()) {
+        while (RX_LIKELY(!copy.at_end())) {
             func(copy.get());
             copy.next();
         }
     }
 };
 template <class F>
-for_each(F&&) -> for_each<RX_REMOVE_CVREF_T<F>>;
+for_each(F &&)->for_each<remove_cvref_t<F>>;
 
 /*!
     @brief Append elements from the range into an existing container.
@@ -1528,6 +1850,7 @@ struct append {
 
     template <class R>
     constexpr C& operator()(R&& range) {
+        // Note: sink() only advances the input range if it is actually an rvalue reference.
         sink(std::forward<R>(range), out);
         return out;
     }
@@ -1539,40 +1862,38 @@ append(C&)->append<C>;
 ///
 /// Writes the result of the inner range to the output, and sorts the output container.
 template <class Compare = std::less<void>>
-struct sort {
-    Compare cmp;
-    constexpr explicit sort(Compare cmp = Compare{}) noexcept : cmp(std::move(cmp)) {}
+struct sort : private Compare {
+    template <class C>
+    constexpr explicit sort(C&& cmp) noexcept : Compare(std::forward<C>(cmp)) {}
+    constexpr explicit sort() {}
 
     template <class InputRange>
-    struct Range {
+    struct Range : private Compare {
         using output_type = get_output_type_of_t<InputRange>;
         InputRange input;
-        Compare cmp;
         constexpr Range(InputRange input, Compare cmp)
-            : input(std::move(input)), cmp(std::move(cmp)) {}
+            : Compare(std::move(cmp)), input(std::move(input)) {}
 
         template <class Out>
             constexpr void sink(Out& out) && noexcept {
             using RX_NAMESPACE::sink; // enable ADL
             sink(std::move(input), out);
+            const Compare& cmp = *this;
             std::sort(begin(out), end(out), cmp);
         }
     };
 
     template <class InputRange>
-    [[nodiscard]] constexpr auto operator()(InputRange&& input) const& noexcept {
-        using Inner = RX_REMOVE_CVREF_T<InputRange>;
+    [[nodiscard]] constexpr auto operator()(InputRange&& input) const noexcept {
+        // Note: We don't want to use as_input_range(), because it would copy the input when
+        // chaining sinks.
+        using Inner = remove_cvref_t<InputRange>;
+        const Compare& cmp = *this;
         return Range<Inner>{std::forward<InputRange>(input), cmp};
-    }
-
-    template <class InputRange>
-        [[nodiscard]] constexpr auto operator()(InputRange&& input) && noexcept {
-        using Inner = RX_REMOVE_CVREF_T<InputRange>;
-        return Range<Inner>{std::forward<InputRange>(input), std::move(cmp)};
     }
 };
 template <class Compare>
-sort(Compare &&)->sort<RX_REMOVE_CVREF_T<Compare>>;
+sort(Compare &&)->sort<remove_cvref_t<Compare>>;
 sort()->sort<>;
 
 /// Unique-elements sink.
@@ -1583,41 +1904,38 @@ sort()->sort<>;
 /// Note: std::unique() only eliminates contiguous sequences of equal elements. If all duplicates
 /// should be removed, sort the range first.
 template <class Compare = std::equal_to<void>>
-struct uniq {
-    Compare cmp;
-    constexpr explicit uniq(Compare cmp = Compare{}) noexcept : cmp(std::move(cmp)) {}
+struct uniq : private Compare {
+    template <class C>
+    constexpr explicit uniq(C&& cmp) noexcept : Compare(std::forward<C>(cmp)) {}
 
     template <class InputRange>
-    struct Range {
+    struct Range : private Compare {
         using output_type = get_output_type_of_t<InputRange>;
         InputRange input;
-        Compare cmp;
         constexpr Range(InputRange input, Compare cmp) noexcept
-            : input(std::move(input)), cmp(std::move(cmp)) {}
+            : Compare(std::move(cmp)), input(std::move(input)) {}
 
         template <class Out>
             constexpr void sink(Out& out) && noexcept {
             using RX_NAMESPACE::sink; // enable ADL
             sink(std::move(input), out);
+            const Compare& cmp = *this;
             auto remove_from = std::unique(begin(out), end(out), cmp);
             out.erase(remove_from, end(out));
         }
     };
 
     template <class InputRange>
-    [[nodiscard]] constexpr auto operator()(InputRange&& input) const& noexcept {
-        using Inner = RX_REMOVE_CVREF_T<InputRange>;
+    [[nodiscard]] constexpr auto operator()(InputRange&& input) const noexcept {
+        // Note: We don't want to use as_input_range(), because it would copy the input when
+        // chaining sinks.
+        using Inner = remove_cvref_t<InputRange>;
+        const Compare& cmp = *this;
         return Range<Inner>{std::forward<InputRange>(input), cmp};
-    }
-
-    template <class InputRange>
-        [[nodiscard]] constexpr auto operator()(InputRange&& input) && noexcept {
-        using Inner = RX_REMOVE_CVREF_T<InputRange>;
-        return Range<Inner>{std::forward<InputRange>(input), std::move(cmp)};
     }
 };
 template <class Compare>
-uniq(Compare &&)->uniq<RX_REMOVE_CVREF_T<Compare>>;
+uniq(Compare &&)->uniq<remove_cvref_t<Compare>>;
 uniq()->uniq<>;
 
 /// Reverse range sink.
@@ -1644,13 +1962,15 @@ struct reverse {
             constexpr void sink(Out& out) && noexcept {
             using RX_NAMESPACE::sink; // enable ADL
             sink(std::move(input), out);
-            std::reverse(std::begin(out), std::end(out));
+            std::reverse(begin(out), end(out));
         }
     };
 
     template <class InputRange>
     [[nodiscard]] constexpr auto operator()(InputRange&& input) const noexcept {
-        using Inner = RX_REMOVE_CVREF_T<InputRange>;
+        // Note: We don't want to use as_input_range(), because it would copy the input when
+        // chaining sinks.
+        using Inner = remove_cvref_t<InputRange>;
         return Range<Inner>{std::forward<InputRange>(input)};
     }
 };

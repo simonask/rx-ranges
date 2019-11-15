@@ -16,10 +16,12 @@ std::string to_string(T val) {
     return std::to_string(val);
 }
 
-TEST_CASE("range operator|") {
-    std::string s = 123 | [](int x) { return to_string(x); };
-    CHECK(s == "123");
-}
+// TEST_CASE("ranges operator| is general") {
+//     // This is not necessarily something we actually want, but it is very convenient when defining
+//     // custom combinators.
+//     std::string s = 123 | [](int x) { return to_string(x); };
+//     CHECK(s == "123");
+// }
 
 TEST_CASE("range transform") {
     auto input = std::vector{{1, 2, 3, 4}};
@@ -175,7 +177,7 @@ TEST_CASE("ranges generate reentrant") {
 }
 
 TEST_CASE("ranges until") {
-    auto input = seq() | until([](int x) { return x == 5; });
+    auto input = seq() | until([](int x) { return x == 5; }) | take(10);
     auto result = input | to_vector();
     auto expected = seq() | first_n(5) | to_vector();
     CHECK(result == expected);
@@ -270,9 +272,21 @@ TEST_CASE("ranges enumerate with indices") {
         }
     }
 
-    auto a = zip(seq(), input) | to_vector();
+    auto a = zip(seq<size_t>(), input) | to_vector();
     auto b = enumerate(input) | to_vector();
     CHECK(a == b);
+}
+
+TEST_CASE("ranges sort") {
+    // Check that we can use std algorithms directly.
+    auto sorted = std::vector{{3, 2, 1}} | sort() | to_vector();
+    CHECK(std::is_sorted(begin(sorted), end(sorted)));
+
+    auto odd = [](auto x) { return x % 2 == 1; };
+
+    // Chaining
+    auto filtered_sorted = std::vector{{3, 2, 1}} | filter(odd) | sort() | to_vector();
+    CHECK(std::is_sorted(begin(filtered_sorted), end(filtered_sorted)));
 }
 
 TEST_CASE("ranges reverse") {
@@ -402,7 +416,32 @@ TEST_CASE("ranges group_adjacent_by") {
     CHECK(group_vectors[0] == std::vector{{0, 1, 2}});
     CHECK(group_vectors[1] == std::vector{{3, 4, 5}});
     CHECK(group_vectors[2] == std::vector{{6, 7, 8}});
-    CHECK(group_vectors[3] == std::vector{1, 9}); // note: initializer list brokenness abound
+    CHECK(group_vectors[3] == std::vector(1, 9)); // note: initializer lists are broken
+}
+
+TEST_CASE("ranges non-default-constructible") {
+    struct Foo {
+        const int x;
+        constexpr explicit Foo(int x) : x(x) {}
+        bool operator<(const Foo& other) const noexcept {
+            return x < other.x;
+        }
+    };
+    static_assert(!std::is_default_constructible_v<Foo>);
+
+    auto generate_foos = seq() | transform([](int x) {
+        return Foo{x};
+    });
+
+    auto vec = generate_foos | filter([](const Foo& foo) {
+        return bool(foo.x % 2);
+    }) | transform([](const Foo& foo) {
+        return Foo{foo.x + 1};
+    }) | take(10) | to_vector();
+    static_cast<void>(vec);
+
+    std::vector<Foo> vec2;
+    generate_foos | take(10) | append(vec2);
 }
 
 /*
