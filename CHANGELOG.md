@@ -27,13 +27,20 @@ for range libraries is supported (see [./test/calendar.cpp](calendar.cpp) for mo
 - When compilers support it, `__builtin_expect` is utilized in inner loops to aid code layout.
 - Idempotency is now only ensured when the input isn't already idempotent.
 - Fine-tuning of many internal loops to avoid unnecessary branches.
-- Where possible, the "empty base class" optimization is used. This mostly applies to combinators    that take a standard comparison predicate (`std::less`, `std::equal_to`, etc.).
+- Where possible, the "empty base class" optimization is used. This mostly applies to combinators
+  that take a standard comparison predicate (`std::less`, `std::equal_to`, etc.).
+- `group_adjacent_by()` no longer requires internal temporary storage in a vector (#6).
 
 ### Other
 
 - Added a benchmark suite using Google Benchmark.
 - Cleanup of internal naming conventions.
 - `T::is_finite` is no longer required for input ranges (defaults to `false` if missing).
+
+### Contributors
+
+- René Kijewski
+- Simon Ask Ulsnes
 
 ## Version 1.0.1
 
