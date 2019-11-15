@@ -3,17 +3,31 @@ name: C/C++ CI
 on: [push, pull_request]
 
 jobs:
-  test-linux:
+  GCC9:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
     - name: install dependencies
-      run: sudo apt-get install libboost-dev doctest-dev
+      run: (sudo apt-get update && sudo apt-get install libboost-date-time-dev doctest-dev ninja-build cmake build-essential g++-9)
     - name: make build dir
       run: mkdir build
     - name: configure
-      run: (cd build && cmake .. -G Ninja -DRX_TEST=ON -DCMAKE_BUILD_TYPE=Debug)
+      run: (cd build && cmake .. -G Ninja -DRX_TEST=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=/usr/bin/g++-9)
     - name: build
       run: ninja -C build
     - name: run tests
-      run: build/rx-ranges-test
+      run: build/rx-ranges-test && build/rx-calendar
+  Clang8:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: install dependencies
+      run: (sudo apt-get update && sudo apt-get install libboost-date-time-dev doctest-dev ninja-build cmake build-essential clang-8)
+    - name: make build dir
+      run: mkdir build
+    - name: configure
+      run: (cd build && cmake .. -G Ninja -DRX_TEST=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=/usr/bin/clang++-8)
+    - name: build
+      run: ninja -C build
+    - name: run tests
+      run: build/rx-ranges-test && build/rx-calendar
