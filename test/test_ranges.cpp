@@ -121,7 +121,7 @@ TEST_CASE("ranges to_map") {
     auto input2 = input1 | transform(&to_string<int>) | first_n(5);
     auto result = zip(input1, input2) | to_map();
     CHECK(result.size() == 5);
-    auto expected = std::map{{
+    auto expected = std::map<int, std::string>{{
         std::make_pair(0, "0"s),
         std::make_pair(1, "1"s),
         std::make_pair(2, "2"s),
@@ -144,11 +144,13 @@ TEST_CASE("ranges append to arbitrary container") {
     auto keys = seq();
     auto values = keys | transform(&to_string<int>);
     zip(keys, values) | first_n(5) | append(result);
-    auto expected = std::unordered_map{{std::make_pair(0.0, "0"s),
-                                        std::make_pair(1.0, "1"s),
-                                        std::make_pair(2.0, "2"s),
-                                        std::make_pair(3.0, "3"s),
-                                        std::make_pair(4.0, "4"s)}};
+    auto expected = std::unordered_map<double, std::string>{{
+        std::make_pair(0.0, "0"s),
+        std::make_pair(1.0, "1"s),
+        std::make_pair(2.0, "2"s),
+        std::make_pair(3.0, "3"s),
+        std::make_pair(4.0, "4"s),
+    }};
     CHECK(result == expected);
 }
 
