@@ -1,5 +1,4 @@
-cmake_minimum_required(VERSION 3.13)
-cmake_policy(SET CMP0076 NEW)
+cmake_minimum_required(VERSION 3.6)
 if ("${CMAKE_VERSION}" VERSION_GREATER_EQUAL "3.15.0")
     cmake_policy(SET CMP0092 NEW) # Disable default warning flags so we can override them in MSVC.
 endif()
@@ -15,7 +14,7 @@ target_compile_features(rx-ranges INTERFACE
 )
 target_sources(rx-ranges
     INTERFACE
-        include/rx/ranges.hpp
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/rx/ranges.hpp"
 )
 target_include_directories(rx-ranges
     INTERFACE include
