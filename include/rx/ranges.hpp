@@ -258,35 +258,47 @@ constexpr auto operator|(LHS&& lhs, RHS&& rhs) noexcept {
 /*!
     @brief Convert input range or sink to standard iterators.
 */
-struct input_range_iterator_end {};
 template <class R>
 struct input_range_iterator {
-    R range;
+    RX_OPTIONAL<R> range;
+    constexpr input_range_iterator() = default;
     template <class Arg>
     constexpr explicit input_range_iterator(Arg&& range) noexcept
-        : range(std::forward<Arg>(range)) {}
+        : range(std::in_place, std::forward<Arg>(range)) {}
 
-    constexpr bool operator==(input_range_iterator_end) const noexcept {
-        return range.at_end();
+    // Is is only expected that you compare an iterator against an iterator returned by end().
+    // Two arbitrary iterators compare equal either if both are at the end, or both are not.
+
+    constexpr bool operator==(const input_range_iterator& other) const noexcept {
+        return bool(*this) == bool(other);
     }
-    constexpr bool operator!=(input_range_iterator_end) const noexcept {
-        return !range.at_end();
+    constexpr bool operator!=(const input_range_iterator& other) const noexcept {
+        return !(*this == other);
+    }
+    constexpr operator bool() const {
+        return bool(range) && !range->at_end();
+    }
+    constexpr bool operator!() const {
+        return !bool(*this);
     }
 
     constexpr auto& operator++() noexcept {
-        RX_ASSERT(!range.at_end());
-        range.next();
+        RX_ASSERT(bool(range));
+        RX_ASSERT(!range->at_end());
+        range->next();
         return *this;
     }
 
     [[nodiscard]] constexpr decltype(auto) operator*() const noexcept {
-        return range.get();
+        RX_ASSERT(bool(range));
+        RX_ASSERT(!range->at_end());
+        return range->get();
     }
     template <
         class T = typename R::output_type,
         class = std::enable_if_t<std::is_lvalue_reference_v<T>>>
     [[nodiscard]] constexpr auto operator-> () const noexcept {
-        return &range.get();
+        return &**this;
     }
 };
 template <class R>
@@ -297,9 +309,8 @@ template <class R, class = std::enable_if_t<is_input_or_sink_v<R>>>
     return input_range_iterator(as_input_range(std::forward<R>(range)));
 }
 template <class R, class = std::enable_if_t<is_input_or_sink_v<R>>>
-[[nodiscard]] constexpr auto end(const R&) noexcept {
-    // Note: The first argument may be moved-from, but that's OK, we just need its type.
-    return input_range_iterator_end{};
+[[nodiscard]] constexpr auto end(R&& range) noexcept {
+    return decltype(begin(std::forward<R>(range))){};
 }
 
 namespace detail {
