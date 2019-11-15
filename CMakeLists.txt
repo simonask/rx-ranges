@@ -50,7 +50,6 @@ if (RX_TEST)
     else()
         message(WARNING "Boost not found, not building calendar example")
     endif()
-
     find_package(benchmark QUIET)
     if (benchmark_FOUND)
         if (UNIX AND NOT APPLE)
