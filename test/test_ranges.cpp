@@ -444,6 +444,11 @@ TEST_CASE("ranges non-default-constructible") {
     generate_foos | take(10) | append(vec2);
 }
 
+TEST_CASE("ranges first after sort") {
+    auto result = std::vector{{ 4, 3, 2, 1 }} | sort() | first();
+    CHECK(result == 1);
+}
+
 /*
 TEST_CASE("ranges append to non-container [no compile]") {
     double not_a_container = 0;
