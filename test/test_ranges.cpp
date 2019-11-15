@@ -17,7 +17,8 @@ std::string to_string(T val) {
 }
 
 // TEST_CASE("ranges operator| is general") {
-//     // This is not necessarily something we actually want, but it is very convenient when defining
+//     // This is not necessarily something we actually want, but it is very convenient when
+//     defining
 //     // custom combinators.
 //     std::string s = 123 | [](int x) { return to_string(x); };
 //     CHECK(s == "123");
@@ -123,7 +124,7 @@ TEST_CASE("ranges to_map") {
     auto input2 = input1 | transform(&to_string<int>) | first_n(5);
     auto result = zip(input1, input2) | to_map();
     CHECK(result.size() == 5);
-    auto expected = std::map{{
+    auto expected = std::map<int, std::string>{{
         std::make_pair(0, "0"s),
         std::make_pair(1, "1"s),
         std::make_pair(2, "2"s),
@@ -146,11 +147,11 @@ TEST_CASE("ranges append to arbitrary container") {
     auto keys = seq();
     auto values = keys | transform(&to_string<int>);
     zip(keys, values) | first_n(5) | append(result);
-    auto expected = std::unordered_map{{std::make_pair(0.0, "0"s),
-                                        std::make_pair(1.0, "1"s),
-                                        std::make_pair(2.0, "2"s),
-                                        std::make_pair(3.0, "3"s),
-                                        std::make_pair(4.0, "4"s)}};
+    auto expected = std::unordered_map<double, std::string>{{std::make_pair(0.0, "0"s),
+                                                             std::make_pair(1.0, "1"s),
+                                                             std::make_pair(2.0, "2"s),
+                                                             std::make_pair(3.0, "3"s),
+                                                             std::make_pair(4.0, "4"s)}};
     CHECK(result == expected);
 }
 
@@ -313,7 +314,7 @@ TEST_CASE("ranges in_groups_of_exactly, constant size") {
     }
 
     std::array<float, 4> expected_sums = {0.f, 0.f, 0.f, 0.f};
-    for (auto [i, x]: enumerate(input)) {
+    for (auto [i, x] : enumerate(input)) {
         expected_sums[i % 4] += x;
     }
 
@@ -336,7 +337,7 @@ TEST_CASE("ranges in_groups_of_exactly, dynamic size") {
     }
 
     std::array<float, 4> expected_sums = {0.f, 0.f, 0.f, 0.f};
-    for (auto [i, x]: enumerate(input)) {
+    for (auto [i, x] : enumerate(input)) {
         expected_sums[i % 4] += x;
     }
 
@@ -374,7 +375,7 @@ TEST_CASE("ranges in_groups_of") {
 
     std::array<float, 4> expected_sums = {0.f, 0.f, 0.f, 0.f};
     float expected_last = 0.f;
-    for (auto [i, x]: enumerate(input)) {
+    for (auto [i, x] : enumerate(input)) {
         if (i < 1000) {
             expected_sums[i % 4] += x;
         } else {
@@ -389,9 +390,7 @@ TEST_CASE("ranges in_groups_of") {
 TEST_CASE("ranges group_adjacent_by") {
     const auto input = seq() | take(10) | to_vector();
 
-    auto pred = [](int x) {
-        return x / 3;
-    };
+    auto pred = [](int x) { return x / 3; };
 
     auto groups = input | group_adjacent_by(pred);
     auto tmp = groups | to_vector();
@@ -429,15 +428,10 @@ TEST_CASE("ranges non-default-constructible") {
     };
     static_assert(!std::is_default_constructible_v<Foo>);
 
-    auto generate_foos = seq() | transform([](int x) {
-        return Foo{x};
-    });
+    auto generate_foos = seq() | transform([](int x) { return Foo{x}; });
 
-    auto vec = generate_foos | filter([](const Foo& foo) {
-        return bool(foo.x % 2);
-    }) | transform([](const Foo& foo) {
-        return Foo{foo.x + 1};
-    }) | take(10) | to_vector();
+    auto vec = generate_foos | filter([](const Foo& foo) { return bool(foo.x % 2); })
+               | transform([](const Foo& foo) { return Foo{foo.x + 1}; }) | take(10) | to_vector();
     static_cast<void>(vec);
 
     std::vector<Foo> vec2;
@@ -445,7 +439,7 @@ TEST_CASE("ranges non-default-constructible") {
 }
 
 TEST_CASE("ranges first after sort") {
-    auto result = std::vector{{ 4, 3, 2, 1 }} | sort() | first();
+    auto result = std::vector{{4, 3, 2, 1}} | sort() | first();
     CHECK(result == 1);
 }
 
