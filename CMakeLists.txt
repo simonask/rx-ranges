@@ -4,7 +4,7 @@ if ("${CMAKE_VERSION}" VERSION_GREATER_EQUAL "3.15.0")
     cmake_policy(SET CMP0092 NEW) # Disable default warning flags so we can override them in MSVC.
 endif()
 
-project(rx-ranges VERSION 1.0.1)
+project(rx-ranges VERSION 2.0.0)
 
 option(RX_TEST ON)
 
