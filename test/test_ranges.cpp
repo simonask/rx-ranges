@@ -388,7 +388,7 @@ TEST_CASE("ranges in_groups_of") {
 }
 
 TEST_CASE("ranges group_adjacent_by") {
-    const auto input = seq() | take(10) | to_vector();
+    const auto input = seq() | take(10);
 
     auto pred = [](int x) { return x / 3; };
 
@@ -404,13 +404,13 @@ TEST_CASE("ranges group_adjacent_by") {
     for (auto it = begin(groups); it != end(groups); ++it) {
         const auto& group = *it;
         for (auto x : group) {
-            CHECK(pred(x) == pred(group[0]));
+            CHECK(pred(x) == pred(group.get()));
             CHECK(pred(x) != previous);
         }
-        previous = pred(group[0]);
+        previous = pred(group.get());
     }
 
-    auto group_vectors = groups | to_vector(); // vector<vector<int>>;
+    auto group_vectors = groups | transform(to_vector()) | to_vector();
     CHECK(group_vectors.size() == 4);
     CHECK(group_vectors[0] == std::vector{{0, 1, 2}});
     CHECK(group_vectors[1] == std::vector{{3, 4, 5}});

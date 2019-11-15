@@ -1403,9 +1403,8 @@ struct in_groups_of {
     @brief Produce consecutive groups of elements for which P returns the same value, according to
     the Compare function.
 
-    The output type is `std::vector<N>` const reference, where T is the output type of the inner
-    range (without cvref-qualifiers). The size of the vector is indeterminate, but always greater
-    than 0.
+    The output type is a range of the same types as the input. The size of the range is
+    indeterminate, but always greater than 0.
 
     @tparam P The discriminant function. When the return value of this function changes, according
               to Compare, a new group is emitted.
@@ -1427,37 +1426,32 @@ struct group_adjacent_by : private Compare {
     template <class R>
     struct Range : private Compare {
         using element_type = remove_cvref_t<typename R::output_type>;
-        using output_type = const std::vector<element_type>&;
+        using output_type = remove_cvref_t<decltype(std::declval<R>() | take(1))>;
         static constexpr bool is_finite = is_finite_v<R>;
         static constexpr bool is_idempotent = true; // we have internal storage
 
         R inner;
         P pred;
-        std::vector<element_type> storage;
-        bool end = false;
+        RX_OPTIONAL<output_type> storage; // rationale: most ranges in this library are not assignable
 
         Range(R inner, P pred, Compare cmp)
             : Compare(std::move(cmp)), inner(std::move(inner)), pred(std::move(pred)) {
-            if (RX_LIKELY(!this->inner.at_end())) {
-                fill_group();
-            } else {
-                end = true;
-            }
+            next();
         }
 
-        [[nodiscard]] output_type get() const noexcept {
-            return storage;
+        [[nodiscard]] constexpr output_type get() const noexcept {
+            return *storage;
         }
 
-        [[nodiscard]] bool at_end() const noexcept {
-            return end;
+        [[nodiscard]] constexpr bool at_end() const noexcept {
+            return !bool(storage);
         }
 
         void next() noexcept {
             if (RX_LIKELY(!inner.at_end())) {
                 fill_group();
             } else {
-                end = true;
+                storage.reset();
             }
         }
 
@@ -1472,32 +1466,20 @@ struct group_adjacent_by : private Compare {
             }
         }
 
-        void fill_group() {
-            // Note: As opposed to the in_groups_of combinators, we must already be at the beginning
-            // of a new group when this function is called, because we can't "rewind" after seeing
-            // that the predicate returned a new value.
-
-            // recycle the vector
-            storage.clear();
-
+        constexpr void fill_group() {
+            auto copy = as_input_range(inner);
             const auto& current = inner.get(); // lifetime extension for value types
             auto p = pred(current);
-            storage.emplace_back(inner.get()); // potentially move
-            inner.next();
+            size_t n = 0;
             const Compare& cmp = *this;
-            while (true) {
-                if (RX_LIKELY(!inner.at_end())) {
-                    const auto& q = inner.get();           // lifetime extension for value types
-                    if (RX_LIKELY(cmp(p, pred(q)))) {      // optimize for group size > 1
-                        storage.emplace_back(inner.get()); // potentially move
-                        inner.next();
-                    } else {
-                        return;
-                    }
-                } else {
-                    return;
+            do {
+                ++n;
+                inner.next();
+                if (inner.at_end()) {
+                    break;
                 }
-            }
+            } while (cmp(p, pred(inner.get())));
+            storage.emplace(std::move(copy) | take(n));
         }
     };
 
