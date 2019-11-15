@@ -1150,66 +1150,51 @@ struct group_adjacent_by {
     template <class R>
     struct Range {
         using element_type = RX_REMOVE_CVREF_T<typename R::output_type>;
-        using output_type = const std::vector<element_type>&;
+        using output_type = RX_REMOVE_CVREF_T<decltype(std::declval<R>() | take(1))>;
         static constexpr bool is_finite = R::is_finite;
 
         R inner;
         P pred;
         Compare cmp;
-        std::vector<element_type> storage;
-        bool end = false;
+        RX_OPTIONAL<output_type> storage; // rationale: most ranges in this library are not assignable
 
-        Range(R inner, P pred, Compare cmp) : inner(std::move(inner)), pred(std::move(pred)), cmp(std::move(cmp)) {
-            if (this->inner.at_end()) {
-                end = true;
-            } else {
-                fill_group();
-            }
+        constexpr Range(R inner_, P pred, Compare cmp) : inner(std::move(inner_)), pred(std::move(pred)), cmp(std::move(cmp)) {
+            next();
         }
 
-        [[nodiscard]] output_type get() const noexcept {
-            return storage;
+        [[nodiscard]] constexpr output_type get() const noexcept {
+            return *storage;
         }
 
-        [[nodiscard]] bool at_end() const noexcept {
-            return end;
+        [[nodiscard]] constexpr bool at_end() const noexcept {
+            return !bool(storage);
         }
 
-        void next() noexcept {
+        constexpr void next() noexcept {
             if (inner.at_end()) {
-                end = true;
+                storage.reset();
             } else {
                 fill_group();
             }
         }
 
-        [[nodiscard]] size_t size_hint() const noexcept {
+        [[nodiscard]] constexpr size_t size_hint() const noexcept {
             return 0;
         }
 
-        void fill_group() {
-            // Note: As opposed to the in_groups_of combinators, we must already be at the beginning
-            // of a new group when this function is called, because we can't "rewind" after seeing
-            // that the predicate returned a new value.
-
-            // recycle the vector
-            storage.clear();
-
+        constexpr void fill_group() {
+            auto copy = as_input_range(inner);
             const auto& current = inner.get(); // lifetime extension for value types
             auto p = pred(current);
-            storage.emplace_back(inner.get()); // potentially move
-            inner.next();
-            while (true) {
-                if (inner.at_end())
-                    return;
-                const auto& q = inner.get(); // lifetime extension for value types
-                if (cmp(p, pred(q))) {
-                    storage.emplace_back(inner.get()); // potentially move
-                    inner.next();
-                } else {
-                    return;
+            size_t n = 0;
+            do {
+                ++n;
+                inner.next();
+                if (inner.at_end()) {
+                    break;
                 }
-            }
+            } while (cmp(p, pred(inner.get())));
+            storage.emplace(std::move(copy) | take(n));
         }
     };
 
