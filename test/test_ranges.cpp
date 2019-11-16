@@ -488,6 +488,25 @@ TEST_CASE("ranges cycle") {
     auto zero_one_two = seq() | take(3) | cycle() | take(10) | to_vector();
     CHECK(zero_one_two == std::vector{{0, 1, 2, 0, 1, 2, 0, 1, 2, 0}});
 }
+
+TEST_CASE("ranges zip_longest") {
+    auto input1 = seq() | first_n(5);
+    auto input2 = input1 | transform(&to_string<int>);
+    auto input3 = seq(10) | first_n(7);
+    auto zipped = zip_longest(input1, input2, input3) | to_vector();
+    CHECK(zipped.size() == 7);
+    auto expected = std::vector{
+        std::make_tuple(RX_OPTIONAL(0), RX_OPTIONAL("0"s), RX_OPTIONAL(10)),
+        std::make_tuple(RX_OPTIONAL(1), RX_OPTIONAL("1"s), RX_OPTIONAL(11)),
+        std::make_tuple(RX_OPTIONAL(2), RX_OPTIONAL("2"s), RX_OPTIONAL(12)),
+        std::make_tuple(RX_OPTIONAL(3), RX_OPTIONAL("3"s), RX_OPTIONAL(13)),
+        std::make_tuple(RX_OPTIONAL(4), RX_OPTIONAL("4"s), RX_OPTIONAL(14)),
+        std::make_tuple(RX_OPTIONAL<int>(), RX_OPTIONAL<std::string>(), RX_OPTIONAL(15)),
+        std::make_tuple(RX_OPTIONAL<int>(), RX_OPTIONAL<std::string>(), RX_OPTIONAL(16)),
+    };
+    CHECK(zipped == expected);
+}
+
 /*
 TEST_CASE("ranges append to non-container [no compile]") {
     double not_a_container = 0;
