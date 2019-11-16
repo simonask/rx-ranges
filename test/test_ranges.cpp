@@ -469,6 +469,11 @@ TEST_CASE("ranges non-default-constructible, non-copyable predicate") {
     }
 }
 
+TEST_CASE("ranges empty_range") {
+    CHECK((empty_range() | count()) == 0);
+    CHECK((empty_range("test"s) | to_vector()) == std::vector<std::string>());
+}
+
 /*
 TEST_CASE("ranges append to non-container [no compile]") {
     double not_a_container = 0;

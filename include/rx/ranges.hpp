@@ -2012,6 +2012,17 @@ struct reverse {
     }
 };
 
+/// A range that is always empty.
+template <class T>
+struct empty_range : public iterator_range<T*> {
+    constexpr empty_range() noexcept : iterator_range<T*>(nullptr, nullptr) {}
+    template <class A>
+    constexpr empty_range(A&&) noexcept : empty_range() {}
+};
+empty_range()->empty_range<int>;
+template <class T>
+empty_range(T&&)->empty_range<remove_cvref_t<T>>;
+
 } // namespace RX_NAMESPACE
 
 #endif // RX_RANGES_HPP_INCLUDED
