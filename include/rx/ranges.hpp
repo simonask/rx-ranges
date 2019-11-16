@@ -1646,7 +1646,7 @@ foldl(T&&, F &&)->foldl<remove_cvref_t<T>, remove_cvref_t<F>>;
     The output type of the input range is required to implement `operator+`.
 */
 struct sum {
-    constexpr sum() noexcept {}
+    constexpr sum() = default;
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& input) const noexcept {
         using type = remove_cvref_t<get_output_type_of_t<R>>;
@@ -1671,7 +1671,7 @@ template <class Compare = std::less<void>>
 struct max : private Compare {
     template <class C>
     constexpr max(C&& cmp) noexcept : Compare(std::forward<C>(cmp)) {}
-    constexpr max() noexcept {}
+    constexpr max() = default;
 
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& input) const noexcept {
@@ -1696,7 +1696,7 @@ template <class Compare = std::less<void>>
 struct min : private Compare {
     template <class C>
     constexpr min(C&& cmp) noexcept : Compare(std::forward<C>(cmp)) {}
-    constexpr min() noexcept {}
+    constexpr min() = default;
 
     template <class R>
     [[nodiscard]] constexpr auto operator()(R&& input) const noexcept {
