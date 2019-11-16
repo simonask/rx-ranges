@@ -1674,17 +1674,22 @@ struct max : private Compare {
     constexpr max() = default;
 
     template <class R>
-    [[nodiscard]] constexpr auto operator()(R&& input) const noexcept {
+    [[nodiscard]] constexpr auto operator()(R&& range) const noexcept {
         using type = remove_cvref_t<get_output_type_of_t<R>>;
+        decltype(auto) input = as_input_range(std::forward<R>(range));
+        using range_type = decltype(input);
         if (RX_LIKELY(!input.at_end())) {
             type first = input.get();
             input.next();
             auto folder = foldl(
                 std::move(first), [this](auto&& accum, auto&& x) constexpr {
+                    // Note: Can't use std::max(), because it takes the comparison function by-value.
                     const Compare& cmp = *this;
-                    return std::max(std::forward<decltype(accum)>(accum), x, cmp);
+                    const auto& accum_ = accum;
+                    const auto& x_ = x;
+                    return cmp(x_, accum_) ? std::forward<decltype(accum)>(accum) : std::forward<decltype(x)>(x);
                 });
-            return RX_OPTIONAL<type>{std::move(folder)(std::forward<R>(input))};
+            return RX_OPTIONAL<type>{std::move(folder)(std::forward<range_type>(input))};
         } else {
             return RX_OPTIONAL<type>{}; // none
         }
@@ -1699,15 +1704,20 @@ struct min : private Compare {
     constexpr min() = default;
 
     template <class R>
-    [[nodiscard]] constexpr auto operator()(R&& input) const noexcept {
+    [[nodiscard]] constexpr auto operator()(R&& range) const noexcept {
         using type = remove_cvref_t<get_output_type_of_t<R>>;
+        decltype(auto) input = as_input_range(std::forward<R>(range));
+        using range_type = decltype(input);
         if (RX_LIKELY(!input.at_end())) {
             auto folder = foldl(
                 type{}, [this](auto&& accum, auto&& x) constexpr {
+                    // Note: Can't use std::min(), because it takes the comparison function by-value.
                     const Compare& cmp = *this;
-                    return std::min(std::forward<decltype(accum)>(accum), x, cmp);
+                    const auto& accum_ = accum;
+                    const auto& x_ = x;
+                    return cmp(accum_, x_) ? std::forward<decltype(accum)>(accum) : std::forward<decltype(x)>(x);
                 });
-            return RX_OPTIONAL<type>{std::move(folder)(std::forward<R>(input))};
+            return RX_OPTIONAL<type>{std::move(folder)(std::forward<range_type>(input))};
         } else {
             return RX_OPTIONAL<type>{}; // none
         }
@@ -1864,18 +1874,24 @@ struct sort : private Compare {
             constexpr void sink(Out& out) && noexcept {
             using RX_NAMESPACE::sink; // enable ADL
             sink(std::move(input), out);
-            const Compare& cmp = *this;
-            std::sort(begin(out), end(out), cmp);
+            std::sort(begin(out), end(out), static_cast<Compare&&>(*this));
         }
     };
 
     template <class InputRange>
-    [[nodiscard]] constexpr auto operator()(InputRange&& input) const noexcept {
+    [[nodiscard]] constexpr auto operator()(InputRange&& input) const& noexcept {
         // Note: We don't want to use as_input_range(), because it would copy the input when
         // chaining sinks.
         using Inner = remove_cvref_t<InputRange>;
         const Compare& cmp = *this;
         return Range<Inner>{std::forward<InputRange>(input), cmp};
+    }
+
+    template <class InputRange>
+    [[nodiscard]] constexpr auto operator()(InputRange&& input) && noexcept {
+        using Inner = remove_cvref_t<InputRange>;
+        return Range<Inner>{std::forward<InputRange>(input), static_cast<Compare&&>(*this)};
+
     }
 };
 template <class Compare>

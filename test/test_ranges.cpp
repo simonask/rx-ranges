@@ -443,6 +443,32 @@ TEST_CASE("ranges first after sort") {
     CHECK(result == 1);
 }
 
+TEST_CASE("ranges non-default-constructible, non-copyable predicate") {
+    // A compare predicate that is not default-constructible or copyable.
+    struct Compare : std::less<void> {
+        constexpr explicit Compare(int) {}
+        constexpr Compare(Compare&&) {}
+        constexpr Compare& operator=(Compare&&) { return *this; }
+        constexpr Compare(const Compare&) = delete;
+        constexpr Compare& operator=(const Compare&) = delete;
+    };
+    static_assert(!std::is_default_constructible_v<Compare>);
+
+    auto in = seq() | take(10);
+    auto vec = in | sort<Compare>(0) | to_vector();
+    CHECK(vec == (in | to_vector()));
+
+    CHECK((in | sort<Compare>(0) | max<Compare>(0)) == 9);
+    CHECK((in | sort<Compare>(0) | min<Compare>(0)) == 0);
+
+    // Compile-time check that iterators don't introduce default-constructibility as a requirement.
+    // Note: Explicit call to as_input_range() is required here because range-based for loops do not
+    //       perfectly-forward to `begin()/end()` (and it would usually be wrong if they did).
+    for (auto x : as_input_range(in | sort<Compare>(0))) {
+        static_cast<void>(x);
+    }
+}
+
 /*
 TEST_CASE("ranges append to non-container [no compile]") {
     double not_a_container = 0;

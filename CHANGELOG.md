@@ -23,6 +23,7 @@ for range libraries is supported (see [./test/calendar.cpp](calendar.cpp) for mo
 - Fix `first()` after `sort()` (#8).
 - `sort()` can now be constructed with comparison predicates taking more than one constructor
   argument.
+- `sort()`/`min()`/`max()` now support non-default-constructible and non-copyable predicates.
 
 ### Optimizations
 
