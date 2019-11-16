@@ -1436,7 +1436,8 @@ struct group_adjacent_by : private Compare {
 
         R inner;
         P pred;
-        RX_OPTIONAL<output_type> storage; // rationale: most ranges in this library are not assignable
+        RX_OPTIONAL<output_type>
+            storage; // rationale: most ranges in this library are not assignable
 
         Range(R inner, P pred, Compare cmp)
             : Compare(std::move(cmp)), inner(std::move(inner)), pred(std::move(pred)) {
@@ -1683,11 +1684,13 @@ struct max : private Compare {
             input.next();
             auto folder = foldl(
                 std::move(first), [this](auto&& accum, auto&& x) constexpr {
-                    // Note: Can't use std::max(), because it takes the comparison function by-value.
+                    // Note: Can't use std::max(), because it takes the comparison function
+                    // by-value.
                     const Compare& cmp = *this;
                     const auto& accum_ = accum;
                     const auto& x_ = x;
-                    return cmp(x_, accum_) ? std::forward<decltype(accum)>(accum) : std::forward<decltype(x)>(x);
+                    return cmp(x_, accum_) ? std::forward<decltype(accum)>(accum)
+                                           : std::forward<decltype(x)>(x);
                 });
             return RX_OPTIONAL<type>{std::move(folder)(std::forward<range_type>(input))};
         } else {
@@ -1714,11 +1717,13 @@ struct min : private Compare {
         if (RX_LIKELY(!input.at_end())) {
             auto folder = foldl(
                 type{}, [this](auto&& accum, auto&& x) constexpr {
-                    // Note: Can't use std::min(), because it takes the comparison function by-value.
+                    // Note: Can't use std::min(), because it takes the comparison function
+                    // by-value.
                     const Compare& cmp = *this;
                     const auto& accum_ = accum;
                     const auto& x_ = x;
-                    return cmp(accum_, x_) ? std::forward<decltype(accum)>(accum) : std::forward<decltype(x)>(x);
+                    return cmp(accum_, x_) ? std::forward<decltype(accum)>(accum)
+                                           : std::forward<decltype(x)>(x);
                 });
             return RX_OPTIONAL<type>{std::move(folder)(std::forward<range_type>(input))};
         } else {
@@ -1886,7 +1891,8 @@ struct sort : private Compare {
             struct indirection {
                 const Compare* cmp;
                 constexpr explicit indirection(const Compare* cmp) : cmp(cmp) {}
-                constexpr bool operator()(const compare_type& lhs, const compare_type& rhs) const noexcept {
+                constexpr bool operator()(const compare_type& lhs, const compare_type& rhs) const
+                    noexcept {
                     return (*cmp)(lhs, rhs);
                 }
             };
@@ -1904,10 +1910,9 @@ struct sort : private Compare {
     }
 
     template <class InputRange>
-    [[nodiscard]] constexpr auto operator()(InputRange&& input) && noexcept {
+        [[nodiscard]] constexpr auto operator()(InputRange&& input) && noexcept {
         using Inner = remove_cvref_t<InputRange>;
         return Range<Inner>{std::forward<InputRange>(input), static_cast<Compare&&>(*this)};
-
     }
 };
 template <class Compare>
