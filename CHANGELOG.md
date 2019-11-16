@@ -21,6 +21,8 @@ for range libraries is supported (see [./test/calendar.cpp](calendar.cpp) for mo
 - Combinators now support non-default-constructible value types, unless the output explicitly
   requires it (#7).
 - Fix `first()` after `sort()` (#8).
+- `sort()` can now be constructed with comparison predicates taking more than one constructor
+  argument.
 
 ### Optimizations
 

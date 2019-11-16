@@ -1669,8 +1669,8 @@ struct sum {
 */
 template <class Compare = std::less<void>>
 struct max : private Compare {
-    template <class C>
-    constexpr max(C&& cmp) noexcept : Compare(std::forward<C>(cmp)) {}
+    template <class... Args>
+    constexpr max(Args&&... args) noexcept : Compare(std::forward<Args>(args)...) {}
     constexpr max() = default;
 
     template <class R>
@@ -1694,8 +1694,8 @@ max()->max<>;
 
 template <class Compare = std::less<void>>
 struct min : private Compare {
-    template <class C>
-    constexpr min(C&& cmp) noexcept : Compare(std::forward<C>(cmp)) {}
+    template <class... Args>
+    constexpr min(Args&&... args) noexcept : Compare(std::forward<Args>(args)...) {}
     constexpr min() = default;
 
     template <class R>
@@ -1849,9 +1849,9 @@ append(C&)->append<C>;
 /// Writes the result of the inner range to the output, and sorts the output container.
 template <class Compare = std::less<void>>
 struct sort : private Compare {
-    template <class C>
-    constexpr explicit sort(C&& cmp) noexcept : Compare(std::forward<C>(cmp)) {}
-    constexpr explicit sort() {}
+    template <class... Args>
+    constexpr explicit sort(Args&&... args) noexcept : Compare(std::forward<Args>(args)...) {}
+    constexpr sort() = default;
 
     template <class InputRange>
     struct Range : private Compare {
