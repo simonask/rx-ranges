@@ -8,7 +8,7 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: install dependencies
-      run: (sudo apt-get update && sudo apt-get install libboost-date-time-dev doctest-dev ninja-build cmake build-essential g++-9)
+      run: (sudo apt-get update && sudo apt-get install libboost-date-time-dev libbenchmark-dev doctest-dev ninja-build cmake build-essential g++-9)
     - name: make build dir
       run: mkdir build
     - name: configure
@@ -16,13 +16,13 @@ jobs:
     - name: build
       run: ninja -C build
     - name: run tests
-      run: build/rx-ranges-test && build/rx-calendar
+      run: build/rx-ranges-test && build/rx-calendar && build/rx-benchmark
   Clang8:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
     - name: install dependencies
-      run: (sudo apt-get update && sudo apt-get install libboost-date-time-dev doctest-dev ninja-build cmake build-essential clang-8)
+      run: (sudo apt-get update && sudo apt-get install libbenchmark-dev libboost-date-time-dev doctest-dev ninja-build cmake build-essential clang-8)
     - name: make build dir
       run: mkdir build
     - name: configure
@@ -30,4 +30,4 @@ jobs:
     - name: build
       run: ninja -C build
     - name: run tests
-      run: build/rx-ranges-test && build/rx-calendar
+      run: build/rx-ranges-test && build/rx-calendar && build/rx-benchmark
