@@ -62,6 +62,20 @@ jobs:
       run: ninja -C build
     - name: run tests
       run: build/rx-ranges-test && build/rx-benchmark
+  Clang8-Benchmark:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: install dependencies
+      run: (sudo apt-get update && sudo apt-get install libbenchmark-dev libboost-date-time-dev doctest-dev ninja-build cmake build-essential clang-8)
+    - name: make build dir
+      run: mkdir build
+    - name: configure
+      run: (cd build && cmake .. -G Ninja -DRX_TEST=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=/usr/bin/clang++-8 -DCMAKE_C_COMPILER=/usr/bin/clang-8)
+    - name: build
+      run: ninja -C build
+    - name: run tests
+      run: build/rx-ranges-test && build/rx-benchmark
   # TODO: libbenchmark is built with libstdc++, so this segfaults on startup. We need to build
   # libbenchmark ourselves.
   # Clang8-libcxx-Benchmark:
