@@ -1691,7 +1691,10 @@ struct max : private Compare {
                 });
             return RX_OPTIONAL<type>{std::move(folder)(std::forward<range_type>(input))};
         } else {
-            return RX_OPTIONAL<type>{}; // none
+            // GCC 9.1 mistakenly thinks the return value is uninitialized unless we declare it as a
+            // local first.
+            const RX_OPTIONAL<type> none;
+            return none;
         }
     }
 };
@@ -1719,7 +1722,10 @@ struct min : private Compare {
                 });
             return RX_OPTIONAL<type>{std::move(folder)(std::forward<range_type>(input))};
         } else {
-            return RX_OPTIONAL<type>{}; // none
+            // GCC 9.1 mistakenly thinks the return value is uninitialized unless we declare it as a
+            // local first.
+            const RX_OPTIONAL<type> none;
+            return none;
         }
     }
 };
@@ -1874,7 +1880,17 @@ struct sort : private Compare {
             constexpr void sink(Out& out) && noexcept {
             using RX_NAMESPACE::sink; // enable ADL
             sink(std::move(input), out);
-            std::sort(begin(out), end(out), static_cast<Compare&&>(*this));
+            // Note: This indirection is only required because GNU libstdc++ implements sort() in a
+            // way that requires the predicate to be copy-constructible.
+            using compare_type = remove_cvref_t<output_type>;
+            struct indirection {
+                const Compare* cmp;
+                constexpr explicit indirection(const Compare* cmp) : cmp(cmp) {}
+                constexpr bool operator()(const compare_type& lhs, const compare_type& rhs) const noexcept {
+                    return (*cmp)(lhs, rhs);
+                }
+            };
+            std::sort(begin(out), end(out), indirection(this));
         }
     };
 
