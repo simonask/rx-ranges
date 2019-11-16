@@ -87,13 +87,14 @@ using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
 
     output_type get() const noexcept; // Get the value at the current position.
 
-    void next() noexcept; // Advance to the next position, returning true if there was more.
+    void next() noexcept; // Advance to the next position.
 
     bool at_end() const noexcept; // True if there are no more elements.
 
     size_t size_hint() const noexcept; // A hint about how many times `next()` can be called.
                                        // It is purely an optimization hint, not the accurate number
-                                       // of times.
+                                       // of times. Return `std::numeric_limits<size_t>::max()` if
+                                       // unknown.
 
     // Optional:
 
@@ -102,6 +103,9 @@ using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
     static constexpr bool is_idempotent = ...; // True if `get()` can be called multiple times
                                                // without advancing internal state. Defaults to
                                                // false.
+    T&& get() && noexcept; // For non-idempotent ranges, an rvalue reference may be returned for
+                           // efficiency. Note that this also requires the const `get()` version to
+                           // be marked as `const&` instead of just `const`.
     @endcode
 
     Calling `get()` or `next()` while `at_end() == true` is a breach of contract, and is allowed to
