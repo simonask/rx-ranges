@@ -818,7 +818,7 @@ struct transform {
         transform transform_;
         using output_type = decltype(std::declval<const F&>()((input_.get())));
         static constexpr bool is_finite = is_finite_v<InputRange>;
-        static constexpr bool is_idempotent = is_idempotent_v<InputRange>;
+        static constexpr bool is_idempotent = false; // `func` is called each time `get` is called
 
         constexpr Range(InputRange input, transform transform) noexcept
             : input_(std::move(input)), transform_(std::move(transform)) {}
