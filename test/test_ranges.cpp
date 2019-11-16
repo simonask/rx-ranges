@@ -109,6 +109,15 @@ TEST_CASE("ranges zip") {
     CHECK(zipped == expected);
 }
 
+TEST_CASE("ranges zip two same") {
+    auto add = [](auto lr) {
+        auto [l, r] = lr;
+        return l + r;
+    };
+    auto value = zip(seq(0), seq(1)) | first_n(5) | transform(add) | max();
+    CHECK(value == 9);
+}
+
 TEST_CASE("ranges zip reentrant") {
     auto input1 = seq() | first_n(5);
     auto input2 = input1 | transform(&to_string<int>);

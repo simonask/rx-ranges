@@ -1119,19 +1119,40 @@ struct ZipRange {
     constexpr explicit ZipRange(std::tuple<Tx...>&& tuple) : inputs(tuple) {}
 
     [[nodiscard]] constexpr output_type get() const noexcept {
-        return output_type(std::forward_as_tuple(std::get<Inputs>(inputs).get()...));
+        return _get(std::index_sequence_for<Inputs...>{});
     }
 
     constexpr void next() noexcept {
-        (std::get<Inputs>(inputs).next(), ...);
+        _next(std::index_sequence_for<Inputs...>{});
     }
 
     [[nodiscard]] constexpr bool at_end() const noexcept {
-        return (std::get<Inputs>(inputs).at_end() || ...);
+        return _at_end(std::index_sequence_for<Inputs...>{});
     }
 
     constexpr size_t size_hint() const noexcept {
-        return std::min({std::get<Inputs>(inputs).size_hint()...});
+        return _size_hint(std::index_sequence_for<Inputs...>{});
+    }
+
+private:
+    template <size_t... Index>
+    [[nodiscard]] constexpr output_type _get(std::index_sequence<Index...>) const noexcept {
+        return output_type(std::forward_as_tuple(std::get<Index>(inputs).get()...));
+    }
+
+    template <size_t... Index>
+    constexpr void _next(std::index_sequence<Index...>) noexcept {
+        (std::get<Index>(inputs).next(), ...);
+    }
+
+    template <size_t... Index>
+    [[nodiscard]] constexpr bool _at_end(std::index_sequence<Index...>) const noexcept {
+        return (std::get<Index>(inputs).at_end() || ...);
+    }
+
+    template <size_t... Index>
+    constexpr size_t _size_hint(std::index_sequence<Index...>) const noexcept {
+        return std::min({std::get<Index>(inputs).size_hint()...});
     }
 };
 template <class... Inputs>
