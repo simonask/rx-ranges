@@ -47,11 +47,11 @@
 // Unfortunately, this is not compatible with C++20 `[[likely]]` / `[[unlikely]]`, because it has a
 // different syntax structure.
 #if defined(__GNUC__) || defined(__clang__)
-#define RX_LIKELY(cond) __builtin_expect(!!(cond), 1)
-#define RX_UNLIKELY(cond) __builtin_expect(!!(cond), 0)
+#define RX_LIKELY(cond) bool(__builtin_expect(!!(cond), 1))
+#define RX_UNLIKELY(cond) bool(__builtin_expect(!!(cond), 0))
 #else
-#define RX_LIKELY(cond) (cond)
-#define RX_UNLIKELY(cond) (cond)
+#define RX_LIKELY(cond) bool(cond)
+#define RX_UNLIKELY(cond) bool(cond)
 #endif
 
 
