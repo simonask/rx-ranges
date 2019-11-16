@@ -469,6 +469,16 @@ TEST_CASE("ranges non-default-constructible, non-copyable predicate") {
     }
 }
 
+TEST_CASE("ranges cycle") {
+    auto nothing = seq() | take(0) | cycle() | take(10) | to_vector();
+    CHECK(nothing == std::vector(0, 0));
+
+    auto zeroes = seq() | take(1) | cycle() | take(10) | to_vector();
+    CHECK(zeroes == std::vector(10, 0));
+
+    auto zero_one_two = seq() | take(3) | cycle() | take(10) | to_vector();
+    CHECK(zero_one_two == std::vector{{0, 1, 2, 0, 1, 2, 0, 1, 2, 0}});
+}
 /*
 TEST_CASE("ranges append to non-container [no compile]") {
     double not_a_container = 0;

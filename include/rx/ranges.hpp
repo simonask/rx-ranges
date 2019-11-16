@@ -1998,6 +1998,54 @@ struct reverse {
     }
 };
 
+/// Create an infinite range repeating the input elements in a loop.
+///
+/// If the input is empty, the output is empty, too.
+struct cycle {
+    template <class R>
+    struct Range {
+        using output_type = typename R::output_type;
+        static constexpr bool is_finite = false;
+        static constexpr bool is_idempotent = R::is_idempotent;
+
+        const R prototype;
+        RX_OPTIONAL<R> input; // rationale: most ranges in this library are not assignable
+
+        constexpr Range(R prototype_) : prototype(std::move(prototype_)) {
+            if (RX_LIKELY(!prototype.at_end())) {
+                input.emplace(prototype);
+            }
+        }
+
+        [[nodiscard]] constexpr output_type get() const noexcept {
+            RX_ASSERT(bool(input));
+            return input->get();
+        }
+
+        [[nodiscard]] constexpr bool at_end() const noexcept {
+            return !bool(input);
+        }
+
+        constexpr void next() noexcept {
+            RX_ASSERT(bool(input));
+            input->next();
+            if (RX_UNLIKELY(input->at_end())) {
+                input.emplace(prototype);
+            }
+        }
+
+        [[nodiscard]] constexpr size_t size_hint() const noexcept {
+            return bool(input) ? std::numeric_limits<size_t>::max() : 0;
+        }
+    };
+
+    template <class R>
+    [[nodiscard]] constexpr auto operator()(R&& input) const {
+        using Inner = get_range_type_t<R>;
+        return Range<Inner>{as_input_range(std::forward<R>(input))};
+    }
+};
+
 } // namespace RX_NAMESPACE
 
 #endif // RX_RANGES_HPP_INCLUDED
