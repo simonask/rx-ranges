@@ -474,6 +474,34 @@ TEST_CASE("ranges empty_range") {
     CHECK((empty_range("test"s) | to_vector()) == std::vector<std::string>());
 }
 
+TEST_CASE("ranges chain") {
+    // 0 arguments
+    static_assert(std::is_same_v<decltype(chain()), decltype(empty_range())>);
+
+    // 1 argument
+    static_assert(std::is_same_v<decltype(chain(seq())), decltype(seq())>);
+
+    // 2 arguments
+    auto homogenous_actual = chain("hello"s, "world"s) | append(""s);
+    auto homogenous_expected = "helloworld"s;
+    CHECK(homogenous_actual == homogenous_expected);
+
+    // 3 arguments
+    auto heterogeneous_actual = chain(seq() | take(4), "test"s, seq()) | take(10) | to_vector();
+    auto heterogeneous_expected = std::vector<int>{{0,1,2,3,'t','e','s','t',0,1}};
+    CHECK(heterogeneous_actual == heterogeneous_expected);
+
+    // Ensure ranges inbetween can be empty.
+    homogenous_actual = chain(""s, "hello"s, "world"s) | append(""s);
+    CHECK(homogenous_actual == homogenous_expected);
+
+    homogenous_actual = chain("hello"s, ""s, "world"s) | append(""s);
+    CHECK(homogenous_actual == homogenous_expected);
+
+    homogenous_actual = chain("hello"s, "world"s, ""s) | append(""s);
+    CHECK(homogenous_actual == homogenous_expected);
+}
+
 /*
 TEST_CASE("ranges append to non-container [no compile]") {
     double not_a_container = 0;

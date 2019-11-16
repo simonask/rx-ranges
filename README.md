@@ -97,6 +97,7 @@ following observations:
 - `uniq()`: Reduce the output by consecutive equality with `std::unique()`. Does not allocate
   temporary storage, unless used as input for further algorithms.
 - `empty_range()`: A range that is always empty.
+- `chain()`: Return values from multiple ranges, one after another.
 
 ## TODO
 
