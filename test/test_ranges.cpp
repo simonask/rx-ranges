@@ -582,6 +582,25 @@ TEST_CASE("ranges ad-hoc lambdas") {
     CHECK(result == std::vector{{1, 3, 5, 7, 9}});
 }
 
+TEST_CASE("ranges flatten") {
+    auto l0 = seq(11) | take(3);
+    auto l1 = fill_n(3, l0);
+    auto l2 = fill_n(3, l1);
+    auto l3 = fill_n(3, l2);
+
+    auto flatten0 = l3 | flatten<0>();
+    auto flatten1 = l3 | flatten();
+    auto flatten2 = l3 | flatten<2>();
+    auto flatten3 = l3 | flatten<3>();
+
+    CHECK((flatten0 | count()) == 3);
+    CHECK((flatten1 | count()) == 3*3);
+    CHECK((flatten2 | count()) == 3*3*3);
+    CHECK((flatten3 | count()) == 3*3*3*3);
+
+    CHECK((flatten3 | sum()) == 3*3*3 * (11+12+13));
+}
+
 /*
 TEST_CASE("ranges append to non-container [no compile]") {
     double not_a_container = 0;
