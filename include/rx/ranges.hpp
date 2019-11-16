@@ -580,7 +580,7 @@ constexpr decltype(auto) as_input_range(R&& range) {
     combinator.
 
     Idempotency is achieved by storing the "current" element in internal, temporary storage. For
-    this reason, the output type of `R` must be default-constructible.
+    this reason, the output type of `R` must be copy-constructible.
 
     @tparam R The inner (non-idempotent) range.
 */
@@ -591,26 +591,27 @@ struct idempotent_range {
     static constexpr bool is_finite = is_finite_v<R>;
     static constexpr bool is_idempotent = true;
     using element_type = remove_cvref_t<typename R::output_type>;
+    using storage_type = RX_OPTIONAL<element_type>; 
     using output_type = const element_type&;
 
     R inner_;
-    element_type current_;
+    storage_type current_;
 
     template <class Q>
     idempotent_range(Q&& inner) : inner_(std::forward<Q>(inner)) {
         if (!inner_.at_end()) {
-            current_ = inner_.get();
+            current_.emplace(inner_.get());
         }
     }
 
     constexpr output_type get() const noexcept {
-        return current_;
+        return *current_;
     }
 
     constexpr void next() noexcept {
         inner_.next();
         if (!inner_.at_end()) {
-            current_ = inner_.get();
+            current_.emplace(inner_.get());
         }
     }
 
