@@ -1119,19 +1119,40 @@ struct ZipRange {
     constexpr explicit ZipRange(std::tuple<Tx...>&& tuple) : inputs(tuple) {}
 
     [[nodiscard]] constexpr output_type get() const noexcept {
-        return output_type(std::forward_as_tuple(std::get<Inputs>(inputs).get()...));
+        return _get(std::index_sequence_for<Inputs...>{});
     }
 
     constexpr void next() noexcept {
-        (std::get<Inputs>(inputs).next(), ...);
+        _next(std::index_sequence_for<Inputs...>{});
     }
 
     [[nodiscard]] constexpr bool at_end() const noexcept {
-        return (std::get<Inputs>(inputs).at_end() || ...);
+        return _at_end(std::index_sequence_for<Inputs...>{});
     }
 
     constexpr size_t size_hint() const noexcept {
-        return std::min({std::get<Inputs>(inputs).size_hint()...});
+        return _size_hint(std::index_sequence_for<Inputs...>{});
+    }
+
+private:
+    template <size_t... Index>
+    [[nodiscard]] constexpr output_type _get(std::index_sequence<Index...>) const noexcept {
+        return output_type(std::forward_as_tuple(std::get<Index>(inputs).get()...));
+    }
+
+    template <size_t... Index>
+    constexpr void _next(std::index_sequence<Index...>) noexcept {
+        (std::get<Index>(inputs).next(), ...);
+    }
+
+    template <size_t... Index>
+    [[nodiscard]] constexpr bool _at_end(std::index_sequence<Index...>) const noexcept {
+        return (std::get<Index>(inputs).at_end() || ...);
+    }
+
+    template <size_t... Index>
+    constexpr size_t _size_hint(std::index_sequence<Index...>) const noexcept {
+        return std::min({std::get<Index>(inputs).size_hint()...});
     }
 };
 template <class... Inputs>
@@ -2105,6 +2126,70 @@ template <class V>
 padded(V&)->padded<remove_cvref_t<V>>;
 template <class V>
 padded(V&&)->padded<remove_cvref_t<V>>;
+  
+template <class... Inputs>
+struct ZipLongestRange {
+    static_assert(sizeof...(Inputs) > 0);
+
+    std::tuple<Inputs...> inputs;
+    using output_type = std::tuple<RX_OPTIONAL<remove_cvref_t<typename Inputs::output_type>>...>;
+    static constexpr bool is_finite = (is_finite_v<Inputs> && ...);
+    static constexpr bool is_idempotent = (is_idempotent_v<Inputs> && ...);
+
+    template <class... Tx>
+    constexpr explicit ZipLongestRange(std::tuple<Tx...>&& tuple) : inputs(tuple) {}
+
+    [[nodiscard]] constexpr output_type get() const noexcept {
+        return _get(std::index_sequence_for<Inputs...>{});
+    }
+
+    constexpr void next() noexcept {
+        _next(std::index_sequence_for<Inputs...>{});
+    }
+
+    [[nodiscard]] constexpr bool at_end() const noexcept {
+        return _at_end(std::index_sequence_for<Inputs...>{});
+    }
+
+    constexpr size_t size_hint() const noexcept {
+        return _size_hint(std::index_sequence_for<Inputs...>{});
+    }
+
+private:
+    template <size_t... Index>
+    [[nodiscard]] constexpr output_type _get(std::index_sequence<Index...>) const noexcept {
+        return output_type(std::forward_as_tuple((std::get<Index>(inputs) | first())...));
+    }
+
+    template <size_t... Index>
+    constexpr void _next(std::index_sequence<Index...>) noexcept {
+        ((std::get<Index>(inputs).at_end() ? 0 : (std::get<Index>(inputs).next(), 0)), ...);
+    }
+
+    template <size_t... Index>
+    [[nodiscard]] constexpr bool _at_end(std::index_sequence<Index...>) const noexcept {
+        return (std::get<Index>(inputs).at_end() && ...);
+    }
+
+    template <size_t... Index>
+    constexpr size_t _size_hint(std::index_sequence<Index...>) const noexcept {
+        return std::max({std::get<Index>(inputs).size_hint()...});
+    }
+};
+template <class... Inputs>
+ZipLongestRange(std::tuple<Inputs...> &&)->ZipLongestRange<remove_cvref_t<Inputs>...>;
+
+/*!
+    @brief Zip two or more ranges, return longest range.
+    Until all of the ranges are at end, produce a tuple of an element from each range.
+    The ranges are not required to produce the same number of elements, and elements will be
+    produced until all of the ranges reach their end. Ranges that ended earlier produce nullopt.
+*/
+template <class... Inputs>
+[[nodiscard]] constexpr auto zip_longest(Inputs&&... inputs) noexcept {
+    // For some reason, argument deduction doesn't work here.
+    return ZipLongestRange(std::forward_as_tuple(as_input_range(std::forward<Inputs>(inputs))...));
+}
 
 } // namespace RX_NAMESPACE
 
