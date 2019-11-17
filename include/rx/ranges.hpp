@@ -1885,7 +1885,21 @@ struct append {
     }
 };
 template <class C>
+struct append <C&&> {
+    C out;
+    constexpr explicit append(C&& out) : out(std::move(out)) {}
+
+    template <class R>
+    [[nodiscard]] constexpr C operator()(R&& range) && {
+        // Note: sink() only advances the input range if it is actually an rvalue reference.
+        sink(std::forward<R>(range), out);
+        return std::move(out);
+    }
+};
+template <class C>
 append(C&)->append<C>;
+template <class C>
+append(C&&)->append<C&&>;
 
 /// Sorting sink.
 ///

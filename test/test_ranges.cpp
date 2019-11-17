@@ -173,6 +173,14 @@ TEST_CASE("ranges append to arbitrary container") {
     CHECK(result == expected);
 }
 
+TEST_CASE("range append to rvalue container") {
+    auto lower = seq<char>('a') | take(26) | append(""s);
+    CHECK(lower == "abcdefghijklmnopqrstuvwxyz"s);
+
+    auto digits = seq() | take(10) | append(std::list(0,0));
+    CHECK(digits == std::list{{0,1,2,3,4,5,6,7,8,9}});
+}
+
 TEST_CASE("ranges generate") {
     int x = 0;
     auto input = generate([&] { return x++; });
