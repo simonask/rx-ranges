@@ -479,6 +479,13 @@ TEST_CASE("ranges cycle") {
     auto zero_one_two = seq() | take(3) | cycle() | take(10) | to_vector();
     CHECK(zero_one_two == std::vector{{0, 1, 2, 0, 1, 2, 0, 1, 2, 0}});
 }
+
+TEST_CASE("ranges padded") {
+    auto actual = seq() | take(3) | padded(-1) | take(5) | to_vector();
+    auto expected = std::vector{{0,1,2,-1,-1}};
+    CHECK(actual == expected);
+}
+
 /*
 TEST_CASE("ranges append to non-container [no compile]") {
     double not_a_container = 0;
