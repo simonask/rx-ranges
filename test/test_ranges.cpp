@@ -489,6 +489,12 @@ TEST_CASE("ranges cycle") {
     CHECK(zero_one_two == std::vector{{0, 1, 2, 0, 1, 2, 0, 1, 2, 0}});
 }
 
+TEST_CASE("ranges padded") {
+    auto actual = seq() | take(3) | padded(-1) | take(5) | to_vector();
+    auto expected = std::vector{{0,1,2,-1,-1}};
+    CHECK(actual == expected);
+}
+
 TEST_CASE("ranges zip_longest") {
     auto input1 = seq() | first_n(5);
     auto input2 = input1 | transform(&to_string<int>);

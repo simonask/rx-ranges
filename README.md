@@ -97,6 +97,7 @@ following observations:
 - `uniq()`: Reduce the output by consecutive equality with `std::unique()`. Does not allocate
   temporary storage, unless used as input for further algorithms.
 - `cycle()`: Create an infinite range repeating the input elements in a loop.
+- `padded()`: Yield an infinite list of constant values once the input range is exhausted.
 - `zip_longest()`: Produce tuples of values from multiple input ranges, until all of the ranges
   reach their end.
 

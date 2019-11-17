@@ -2067,6 +2067,66 @@ struct cycle {
     }
 };
 
+/// Yield an infinite list of constant values once the input range is exhausted.
+template <class V>
+struct padded {
+    V value;
+    template <class Vx>
+    explicit constexpr padded(Vx&& value) noexcept : value(std::forward<Vx>(value)) {}
+
+    template <class R>
+    struct Range {
+        R input;
+        const V value;
+
+        using output_type = std::common_type_t<remove_cvref_t<get_output_type_of_t<R>>, V>;
+        static constexpr bool is_finite = false;
+        static constexpr bool is_idempotent = is_idempotent_v<R>;
+
+        template <class Rx, class Vx>
+        constexpr Range(Rx&& input, Vx&& value) noexcept
+            : input(std::forward<Rx>(input)), value(std::forward<Vx>(value)) {}
+
+        constexpr void next() {
+            if (!input.at_end()) {
+                input.next();
+            }
+        }
+
+        [[nodiscard]] constexpr output_type get() const {
+            if (!input.at_end()) {
+                return input.get();
+            } else {
+                return value;
+            }
+        }
+
+        [[nodiscard]] constexpr bool at_end() const {
+            return false;
+        }
+
+        [[nodiscard]] constexpr size_t size_hint() const noexcept {
+            return std::numeric_limits<size_t>::max();
+        }
+    };
+
+    template <class InputRange>
+    [[nodiscard]] constexpr auto operator()(InputRange&& input) const& noexcept {
+        using Inner = get_range_type_t<InputRange>;
+        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), value};
+    }
+
+    template <class InputRange>
+    [[nodiscard]] constexpr auto operator()(InputRange&& input) && noexcept {
+        using Inner = get_range_type_t<InputRange>;
+        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), std::move(value)};
+    }
+};
+template <class V>
+padded(V&)->padded<remove_cvref_t<V>>;
+template <class V>
+padded(V&&)->padded<remove_cvref_t<V>>;
+  
 template <class... Inputs>
 struct ZipLongestRange {
     static_assert(sizeof...(Inputs) > 0);
