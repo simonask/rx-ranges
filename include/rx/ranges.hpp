@@ -1070,7 +1070,7 @@ struct until {
     struct Range {
         static_assert(is_idempotent_v<R>);
         using output_type = remove_cvref_t<typename R::output_type>;
-        static constexpr bool is_finite = is_finite_v<R>;
+        static constexpr bool is_finite = true;
         static constexpr bool is_idempotent = true;
 
         R input;
@@ -1109,7 +1109,7 @@ struct until {
         }
 
         constexpr size_t size_hint() const noexcept {
-            return input.size_hint();
+            return 0;
         }
     };
 
