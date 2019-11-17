@@ -55,6 +55,15 @@ TEST_CASE("range filter reentrant") {
     CHECK(a == b);
 }
 
+TEST_CASE("range filter idempotent") {
+    auto input = std::vector{{1, 2, 3, 4}};
+    int idempotent_guard{0};
+    auto odd = input | transform([&idempotent_guard] (int i) { ++idempotent_guard; return i; }) | filter([](int x) { return x % 2 == 1; });
+    auto a = odd | to_vector();
+    CHECK(a == std::vector{{1,3}});
+    CHECK(idempotent_guard == 4);
+}
+
 TEST_CASE("range first") {
     auto input = std::vector{{"Hello"s, "World"s, "Morty"s}};
     auto contains_y = [](std::string_view sv) { return sv.find('y') != std::string::npos; };
