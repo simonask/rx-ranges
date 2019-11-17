@@ -2473,6 +2473,16 @@ struct flatten {
     }
 };
 
+/// A sink that simply discards all elements of a range.
+///
+/// Use as `append(null_sink())` if you need the range to run, but you don't need the result.
+struct null_sink {
+    struct value_type {};
+
+    template <class... V>
+    constexpr void emplace_back(V&&...) const noexcept {}
+};
+
 } // namespace RX_NAMESPACE
 
 #endif // RX_RANGES_HPP_INCLUDED
