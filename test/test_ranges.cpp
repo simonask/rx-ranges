@@ -127,6 +127,12 @@ TEST_CASE("ranges zip two same") {
     CHECK(value == 9);
 }
 
+TEST_CASE("ranges zip advance_by") {
+    auto input = zip(seq(), seq(1));
+    advance_by(input, 10);
+    CHECK(input.get() == std::tuple{10, 11});
+}
+
 TEST_CASE("ranges zip reentrant") {
     auto input1 = seq() | first_n(5);
     auto input2 = input1 | transform(&to_string<int>);
@@ -323,20 +329,23 @@ TEST_CASE("ranges reverse") {
     CHECK(result == expected);
 }
 
-TEST_CASE("ranges in_groups_of_exactly, constant size") {
+TEST_CASE("ranges in_groups_of_exactly, dynamic size") {
     auto input = seq<float>() | take(1000) | to_vector();
 
-    size_t num_groups = input | in_groups_of_exactly<4>() | count();
+    size_t num_groups = input | in_groups_of_exactly(4) | count();
     CHECK(num_groups == 250);
 
     // In optimized builds, compilers should be able to auto-vectorize this.
     std::array<float, 4> sums = {0.f, 0.f, 0.f, 0.f};
-    for (auto group : input | in_groups_of_exactly<4>()) {
-        // This becomes a single _mm_add_ps on Clang, but not MSVC.
-        std::get<0>(sums) += std::get<0>(group);
-        std::get<1>(sums) += std::get<1>(group);
-        std::get<2>(sums) += std::get<2>(group);
-        std::get<3>(sums) += std::get<3>(group);
+    for (auto group : input | in_groups_of_exactly(4)) {
+        std::get<0>(sums) += group.get();
+        group.next();
+        std::get<1>(sums) += group.get();
+        group.next();
+        std::get<2>(sums) += group.get();
+        group.next();
+        std::get<3>(sums) += group.get();
+        group.next();
     }
 
     std::array<float, 4> expected_sums = {0.f, 0.f, 0.f, 0.f};
@@ -347,27 +356,11 @@ TEST_CASE("ranges in_groups_of_exactly, constant size") {
     CHECK(sums == expected_sums);
 }
 
-TEST_CASE("ranges in_groups_of_exactly, dynamic size") {
-    auto input = seq<float>() | take(1000) | to_vector();
-
-    size_t num_groups = input | in_groups_of_exactly(4) | count();
-    CHECK(num_groups == 250);
-
-    // In optimized builds, compilers should be able to auto-vectorize this.
-    std::array<float, 4> sums = {0.f, 0.f, 0.f, 0.f};
-    for (auto group : input | in_groups_of_exactly(4)) {
-        std::get<0>(sums) += group[0];
-        std::get<1>(sums) += group[1];
-        std::get<2>(sums) += group[2];
-        std::get<3>(sums) += group[3];
-    }
-
-    std::array<float, 4> expected_sums = {0.f, 0.f, 0.f, 0.f};
-    for (auto [i, x] : enumerate(input)) {
-        expected_sums[i % 4] += x;
-    }
-
-    CHECK(sums == expected_sums);
+TEST_CASE("ranges in_groups_of_exactly advance_by") {
+    auto input = seq() | in_groups_of_exactly(4);
+    advance_by(input, 3);  // already at the first group
+    auto group = input.get();
+    CHECK(group.get() == 16);
 }
 
 TEST_CASE("ranges in_groups_of") {
@@ -387,15 +380,23 @@ TEST_CASE("ranges in_groups_of") {
     // for this particular case. It's a bit of a mystery, since this works for all the other range
     // types, and there doesn't seem to be any difference in how the in_groups_of() adapter works.
     for (auto it = begin(groups); it != end(groups); ++it) {
-        auto& group = *it;
-        CHECK(group.size() != 0);
-        if (group.size() == 4) {
-            std::get<0>(sums) += group[0];
-            std::get<1>(sums) += group[1];
-            std::get<2>(sums) += group[2];
-            std::get<3>(sums) += group[3];
+        auto group = *it;
+        CHECK(!group.at_end());
+        size_t len = group | count();
+        if (len == 4) {
+            std::get<0>(sums) += group.get();
+            group.next();
+            std::get<1>(sums) += group.get();
+            group.next();
+            std::get<2>(sums) += group.get();
+            group.next();
+            std::get<3>(sums) += group.get();
+            group.next();
         } else {
-            last = group.back();
+            do {
+                last = group.get();
+                group.next();
+            } while (!group.at_end());
         }
     }
 
@@ -411,6 +412,13 @@ TEST_CASE("ranges in_groups_of") {
 
     CHECK(sums == expected_sums);
     CHECK(last == expected_last);
+}
+
+TEST_CASE("ranges in_groups_of advance_by") {
+    auto input = seq() | in_groups_of(4);
+    advance_by(input, 3);  // already at the first group
+    auto group = input.get();
+    CHECK(group.get() == 16);
 }
 
 TEST_CASE("ranges group_adjacent_by") {
