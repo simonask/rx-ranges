@@ -563,6 +563,30 @@ TEST_CASE("ranges zip_longest") {
     CHECK(zipped == expected);
 }
 
+TEST_CASE("ranges lambda") {
+    auto actual = std::vector(0, 0);
+    auto expected = std::vector{{10, 8, 6, 4, 2}};
+
+    // with lvalue lambda
+    auto f = lambda() | transform([](int v) { return 5 - v; }) | until([](int v) { return v <= 0; })
+        | transform([](int v) { return 2*v; });
+    actual = seq() | f | take(10) | to_vector();
+    CHECK(actual == expected);
+
+    // with rvalue lambda
+    actual = seq()
+        | (lambda() | transform([](int v) { return 5 - v; }) | until([](int v) { return v <= 0; })
+            | transform([](int v) { return 2*v; }))
+        | take(10) | to_vector();
+    CHECK(actual == expected);
+
+    // with rvalue lambda (noop)
+    actual = seq()
+        | lambda() | transform([](int v) { return 5 - v; }) | until([](int v) { return v <= 0; })
+        | transform([](int v) { return 2*v; }) | take(10) | to_vector();
+    CHECK(actual == expected);
+}
+
 /*
 TEST_CASE("ranges append to non-container [no compile]") {
     double not_a_container = 0;

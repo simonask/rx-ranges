@@ -241,6 +241,11 @@ struct is_random_access_iterator<T, std::void_t<decltype(std::declval<T&>() += 1
 template <class T>
 constexpr bool is_random_access_iterator_v = is_random_access_iterator<T>::value;
 
+namespace detail {
+    // Used to disable operator|. lambda<> has it's own operator|.
+    struct lambda_tag {};
+}
+
 /// Convenience notation for chaining ranges.
 ///
 /// Note that this enables `operator|` for any pair where RHS is callable with LHS as its only
@@ -250,6 +255,9 @@ constexpr bool is_random_access_iterator_v = is_random_access_iterator<T>::value
 template <
     class LHS,
     class RHS,
+    class = std::enable_if_t<
+        !std::is_base_of_v<detail::lambda_tag, remove_cvref_t<LHS>> &&
+        !std::is_base_of_v<detail::lambda_tag, remove_cvref_t<RHS>>>,
     class = std::void_t<decltype(std::declval<RHS>()(std::declval<LHS>()))>>
 constexpr auto operator|(LHS&& lhs, RHS&& rhs) noexcept {
     return std::forward<RHS>(rhs)(std::forward<LHS>(lhs));
@@ -2316,6 +2324,60 @@ template <class... Inputs>
     // For some reason, argument deduction doesn't work here.
     return ZipLongestRange(std::forward_as_tuple(as_input_range(std::forward<Inputs>(inputs))...));
 }
+
+/// Make chained operations reusable.
+template <class... Fs>
+struct lambda : detail::lambda_tag {
+    std::tuple<Fs...> funcs;
+
+    constexpr lambda() = default;
+
+    template <class... Fx>
+    constexpr lambda(Fx&&... funcs) : funcs(std::forward<Fx>(funcs)...) {}
+
+    template <class Gx>
+    [[nodiscard]] constexpr auto operator|(Gx&& g) && {
+        return _lambda(std::move(*this), std::forward<Gx>(g), std::index_sequence_for<Fs...>{});
+    }
+
+    template <class Gx>
+    [[nodiscard]] constexpr auto operator|(Gx&& g) const& {
+        return _lambda(*this, std::forward<Gx>(g), std::index_sequence_for<Fs...>{});
+    }
+
+    template <class InputRange>
+    [[nodiscard]] friend constexpr auto operator|(InputRange&& input, lambda&& self) {
+        return _unlambda(std::move(self), std::forward<InputRange>(input), std::index_sequence_for<Fs...>{});
+    }
+
+    template <class InputRange>
+    [[nodiscard]] friend constexpr auto operator|(InputRange&& input, const lambda& self) {
+        return _unlambda(self, std::forward<InputRange>(input), std::index_sequence_for<Fs...>{});
+    }
+
+private:
+    template <class Lx, class Gx, size_t... Index>
+    [[nodiscard]] constexpr auto _lambda(Lx&& self, Gx&& g, std::index_sequence<Index...>) {
+        return lambda<Fs..., remove_cvref_t<Gx>>(
+            std::get<Index>(std::forward<Lx>(self).funcs)..., std::forward<Gx>(g));
+    }
+
+    template <class Lx, class Rx, size_t... Index>
+    [[nodiscard]] static constexpr auto _unlambda(Lx&& self, Rx&& input, std::index_sequence<Index...>) {
+        return _unlambda_sub(std::forward<Rx>(input), std::get<Index>(std::forward<Lx>(self).funcs)...);
+    }
+
+    template <class Rx, class Fx, class... Fxs>
+    [[nodiscard]] static constexpr auto _unlambda_sub(Rx&& input, Fx&& fn, Fxs&&... fns) {
+        return _unlambda_sub(std::forward<Fx>(fn)(std::forward<Rx>(input)), std::forward<Fxs>(fns)...);
+    }
+
+    template <class Rx>
+    [[nodiscard]] static constexpr auto _unlambda_sub(Rx&& input) {
+        return std::forward<Rx>(input);
+    }
+};
+lambda()->lambda<>;
 
 } // namespace RX_NAMESPACE
 
