@@ -16,14 +16,10 @@ using date_t = greg::date;
 static void make_calendar(uint16_t year, uint8_t num_months_horizontally, std::ostream& os) {
     static const std::array<std::string, 12> s_month_names = {
         "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-    generate([date = date_t(year, greg::Jan, 1)]() mutable {
-        auto ret = date;
-        date = date + greg::date_duration(1);
-        return ret;
-    })                                                         //
-        | until([year](date_t x) { return x.year() != year; }) //
+    seq(date_t(year, greg::Jan, 1), greg::date_duration(1))
+        | until([year](date_t x) { return x.year() != year; })
         | group_adjacent_by(
-            [](const date_t& d) { return std::make_pair(d.month(), d.week_number()); }) //
+            [](const date_t& d) { return std::make_pair(d.month(), d.week_number()); })
         | transform([&](const auto &wk_dates) -> std::pair<date_t::month_type, std::string> {
               const auto left_pad_amt = size_t(3 * ((wk_dates.get().day_of_week() + 7 - 1) % 7));
               return {wk_dates.get().month(),
