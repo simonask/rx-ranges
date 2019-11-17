@@ -103,6 +103,7 @@ Algorithms that produce ranges from the output of other ranges.
   reach their end.
 - `zip()`: Produce tuples of values from multiple input ranges, until one of the ranges reaches its
   end.
+- `windowed(n, step=1)`: Sliding window of width `n` over an input range.
 
 ### Aggregators
 

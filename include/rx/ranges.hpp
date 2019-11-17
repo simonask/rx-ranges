@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <deque>
 #include <list>
 #include <map>
 #include <set>
@@ -2358,6 +2359,107 @@ struct tee {
 };
 template <class Dest>
 tee(Dest&)->tee<remove_cvref_t<Dest>>;
+
+/// Sliding window over an input range.
+///
+/// E.g. for a range `(1,2,3,4,5)` a window of 2 elements is `[(1,2), (2,3), (3,4), (5)]`.
+/// For a range `(1,2,3,4,5,6)` a window of 2 elements with a stepsize of 3 is `[(1,2), (4,5)]`.
+///
+/// Inspired by [more_itertools.windowed()](https://more-itertools.readthedocs.io/en/v7.2.0/api.html#more_itertools.windowed).
+struct windowed {
+    const size_t n = 1;
+    const size_t stepsize = 1;
+
+    explicit constexpr windowed(size_t n, size_t stepsize = 1) noexcept
+        : n(n), stepsize(stepsize) {
+        RX_ASSERT(n > 0);
+        RX_ASSERT(stepsize > 0);
+    }
+
+    template <class R>
+    struct Range {
+        using element_type = remove_cvref_t<get_output_type_of_t<R>>;
+        using output_type = std::deque<element_type>;
+        static constexpr bool is_finite = is_finite_v<R>;
+        static constexpr bool is_idempotent = true; // the have our own buffer
+
+        R input;
+        output_type storage;
+        const size_t n;
+        const size_t stepsize;
+
+        template <class Rx>
+        constexpr Range(Rx &&input_, size_t n, size_t stepsize) : input(std::forward<Rx>(input_)), n(n), stepsize(stepsize) {
+            if (RX_LIKELY(!input.at_end())) {
+                _fill_empty_storage();
+            }
+        }
+
+        [[nodiscard]] constexpr const output_type& get() const& noexcept {
+            return storage;
+        }
+
+        [[nodiscard]] constexpr output_type get() && noexcept {
+            return std::move(storage);
+        }
+
+        void next() {
+            if (RX_UNLIKELY(input.at_end())) {
+                storage.clear();
+                return;
+            }
+
+            if (stepsize < n) {
+                for (size_t i = stepsize; i > 0; --i) {
+                    storage.pop_front();
+                    storage.emplace_back(input.get());
+
+                    input.next();
+                    if (RX_UNLIKELY(input.at_end())) {
+                        break;
+                    }
+                }
+            } else {
+                storage.clear();
+                for (size_t i = stepsize - n; i > 0; --i) {
+                    input.next();
+                    if (RX_UNLIKELY(input.at_end())) {
+                        return;
+                    }
+                }
+                _fill_empty_storage();
+            }
+        }
+
+        [[nodiscard]] constexpr bool at_end() const noexcept {
+            return storage.empty();
+        }
+
+        [[nodiscard]] constexpr size_t size_hint() const noexcept {
+            size_t hint = input.size_hint();
+            if (hint + (n - 1) > hint) {
+                return std::max(hint + (n - 1), hint) / n;
+            }
+            return std::numeric_limits<size_t>::max();
+        }
+
+    private:
+        void _fill_empty_storage() {
+            storage.emplace_front(input.get());
+            input.next();
+
+            for (size_t i = 1; i < n && RX_LIKELY(!input.at_end()); ++i, input.next()) {
+                storage.emplace_back(input.get());
+            }
+        }
+    };
+
+    template <class InputRange>
+    [[nodiscard]] constexpr auto operator()(InputRange&& input) const {
+        using Inner = get_range_type_t<InputRange>;
+        return Range<Inner>(as_input_range(std::forward<InputRange>(input)), n, stepsize);
+    }
+};
 
 } // namespace RX_NAMESPACE
 
