@@ -2034,6 +2034,117 @@ struct reverse {
     }
 };
 
+/// A range that is always empty.
+template <class T>
+struct empty_range : public iterator_range<T*> {
+    constexpr empty_range() noexcept : iterator_range<T*>(nullptr, nullptr) {}
+    template <class A>
+    constexpr empty_range(A&&) noexcept : empty_range() {}
+};
+empty_range()->empty_range<int>;
+template <class T>
+empty_range(T&&)->empty_range<remove_cvref_t<T>>;
+
+template <class... Rs>
+struct ChainRange {
+    static_assert(sizeof...(Rs) >= 2);
+
+    static constexpr bool is_finite = (is_finite_v<Rs> && ...);
+    static constexpr bool is_idempotent = (is_idempotent_v<Rs> && ...);
+    using output_type = std::common_type_t<typename Rs::output_type...>;
+
+    std::tuple<Rs...> inner_tpl;
+    size_t n = 0;
+
+    template <class... Rx>
+    explicit constexpr ChainRange(Rx&&... inner_tpl) : inner_tpl(std::forward<Rx>(inner_tpl)...) {
+        _skip_to_data(std::make_index_sequence<sizeof...(Rs)>{});
+    }
+
+    [[nodiscard]] output_type get() const noexcept {
+        RX_ASSERT(!at_end());
+        return _get(std::make_index_sequence<sizeof...(Rs)>{});
+    }
+
+    [[nodiscard]] bool at_end() const noexcept {
+        return n == sizeof...(Rs);
+    }
+
+    constexpr void next() noexcept {
+        RX_ASSERT(!at_end());
+        _next(std::make_index_sequence<sizeof...(Rs)>{});
+    }
+
+    [[nodiscard]] constexpr size_t size_hint() const noexcept {
+        return _size_hint(std::make_index_sequence<sizeof...(Rs)>{});
+    }
+
+private:
+    template <std::size_t... Index>
+    constexpr size_t _size_hint(std::index_sequence<Index...>) const {
+        return (0 + ... + std::get<Index>(inner_tpl).size_hint());
+    }
+
+    template <std::size_t... Index>
+    constexpr void _next(std::index_sequence<Index...>) noexcept {
+        using Fn = bool(*)(ChainRange&);
+        constexpr Fn fns[] = { &_next_at<Index>... };
+        if (RX_UNLIKELY(fns[n](*this))) {
+            _skip_to_data(std::make_index_sequence<sizeof...(Rs)>{});
+        }
+    }
+
+    template <std::size_t Index>
+    static constexpr bool _next_at(ChainRange &self) {
+        auto &inner = std::get<Index>(self.inner_tpl);
+        inner.next();
+        return inner.at_end();
+    }
+
+    template <std::size_t... Index>
+    constexpr output_type _get(std::index_sequence<Index...>) const {
+        using Fn = output_type(*)(const ChainRange&);
+        constexpr Fn fns[] = { &_get_at<Index>... };
+        return fns[n](*this);
+    }
+
+    template <std::size_t Index>
+    static constexpr output_type _get_at(const ChainRange &self) {
+        return { std::get<Index>(self.inner_tpl).get() };
+    }
+
+    template <std::size_t... Index>
+    constexpr void _skip_to_data(std::index_sequence<Index...>) {
+        using Fn = bool(*)(const ChainRange&);
+        constexpr Fn fns[] = { &_at_end_at<Index>... };
+        do {
+            if (RX_LIKELY(!fns[n](*this))) {
+                return;
+            }
+            ++n;
+        } while (n < sizeof...(Rs));
+    }
+
+    template <std::size_t Index>
+    static constexpr bool _at_end_at(const ChainRange &self) {
+        return std::get<Index>(self.inner_tpl).at_end();
+    }
+};
+
+/// Return values from multiple ranges.
+///
+/// Once the first range is exhausted, values from the second range are returned, and so on.
+template <class... InputRanges>
+[[nodiscard]] constexpr auto chain(InputRanges&&... inputs) {
+    if constexpr (sizeof...(InputRanges) == 0) {
+        return empty_range();
+    } else if constexpr (sizeof...(InputRanges) == 1) {
+        return std::get<0>(std::forward_as_tuple(as_input_range(std::forward<InputRanges>(inputs))...));
+    } else {
+        return ChainRange<get_range_type_t<InputRanges>...>{as_input_range(std::forward<InputRanges>(inputs))...};
+    }
+}
+
 /// Create an infinite range repeating the input elements in a loop.
 ///
 /// If the input is empty, the output is empty, too.
