@@ -55,6 +55,15 @@ TEST_CASE("range filter reentrant") {
     CHECK(a == b);
 }
 
+TEST_CASE("range filter idempotent") {
+    auto input = std::vector{{1, 2, 3, 4}};
+    int idempotent_guard{0};
+    auto odd = input | transform([&idempotent_guard] (int i) { ++idempotent_guard; return i; }) | filter([](int x) { return x % 2 == 1; });
+    auto a = odd | to_vector();
+    CHECK(a == std::vector{{1,3}});
+    CHECK(idempotent_guard == 4);
+}
+
 TEST_CASE("range first") {
     auto input = std::vector{{"Hello"s, "World"s, "Morty"s}};
     auto contains_y = [](std::string_view sv) { return sv.find('y') != std::string::npos; };
@@ -109,6 +118,15 @@ TEST_CASE("ranges zip") {
     CHECK(zipped == expected);
 }
 
+TEST_CASE("ranges zip two same") {
+    auto add = [](auto lr) {
+        auto [l, r] = lr;
+        return l + r;
+    };
+    auto value = zip(seq(0), seq(1)) | first_n(5) | transform(add) | max();
+    CHECK(value == 9);
+}
+
 TEST_CASE("ranges zip reentrant") {
     auto input1 = seq() | first_n(5);
     auto input2 = input1 | transform(&to_string<int>);
@@ -153,6 +171,14 @@ TEST_CASE("ranges append to arbitrary container") {
                                                              std::make_pair(3.0, "3"s),
                                                              std::make_pair(4.0, "4"s)}};
     CHECK(result == expected);
+}
+
+TEST_CASE("range append to rvalue container") {
+    auto lower = seq<char>('a') | take(26) | append(""s);
+    CHECK(lower == "abcdefghijklmnopqrstuvwxyz"s);
+
+    auto digits = seq() | take(10) | append(std::list(0,0));
+    CHECK(digits == std::list{{0,1,2,3,4,5,6,7,8,9}});
 }
 
 TEST_CASE("ranges generate") {
@@ -500,6 +526,41 @@ TEST_CASE("ranges chain") {
 
     homogenous_actual = chain("hello"s, "world"s, ""s) | append(""s);
     CHECK(homogenous_actual == homogenous_expected);
+}
+
+TEST_CASE("ranges cycle") {
+    auto nothing = seq() | take(0) | cycle() | take(10) | to_vector();
+    CHECK(nothing == std::vector(0, 0));
+
+    auto zeroes = seq() | take(1) | cycle() | take(10) | to_vector();
+    CHECK(zeroes == std::vector(10, 0));
+
+    auto zero_one_two = seq() | take(3) | cycle() | take(10) | to_vector();
+    CHECK(zero_one_two == std::vector{{0, 1, 2, 0, 1, 2, 0, 1, 2, 0}});
+}
+
+TEST_CASE("ranges padded") {
+    auto actual = seq() | take(3) | padded(-1) | take(5) | to_vector();
+    auto expected = std::vector{{0,1,2,-1,-1}};
+    CHECK(actual == expected);
+}
+
+TEST_CASE("ranges zip_longest") {
+    auto input1 = seq() | first_n(5);
+    auto input2 = input1 | transform(&to_string<int>);
+    auto input3 = seq(10) | first_n(7);
+    auto zipped = zip_longest(input1, input2, input3) | to_vector();
+    CHECK(zipped.size() == 7);
+    auto expected = std::vector{
+        std::make_tuple(RX_OPTIONAL(0), RX_OPTIONAL("0"s), RX_OPTIONAL(10)),
+        std::make_tuple(RX_OPTIONAL(1), RX_OPTIONAL("1"s), RX_OPTIONAL(11)),
+        std::make_tuple(RX_OPTIONAL(2), RX_OPTIONAL("2"s), RX_OPTIONAL(12)),
+        std::make_tuple(RX_OPTIONAL(3), RX_OPTIONAL("3"s), RX_OPTIONAL(13)),
+        std::make_tuple(RX_OPTIONAL(4), RX_OPTIONAL("4"s), RX_OPTIONAL(14)),
+        std::make_tuple(RX_OPTIONAL<int>(), RX_OPTIONAL<std::string>(), RX_OPTIONAL(15)),
+        std::make_tuple(RX_OPTIONAL<int>(), RX_OPTIONAL<std::string>(), RX_OPTIONAL(16)),
+    };
+    CHECK(zipped == expected);
 }
 
 /*

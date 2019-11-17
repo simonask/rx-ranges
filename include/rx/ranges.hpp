@@ -580,7 +580,7 @@ constexpr decltype(auto) as_input_range(R&& range) {
     combinator.
 
     Idempotency is achieved by storing the "current" element in internal, temporary storage. For
-    this reason, the output type of `R` must be default-constructible.
+    this reason, the output type of `R` must be copy-constructible.
 
     @tparam R The inner (non-idempotent) range.
 */
@@ -591,26 +591,27 @@ struct idempotent_range {
     static constexpr bool is_finite = is_finite_v<R>;
     static constexpr bool is_idempotent = true;
     using element_type = remove_cvref_t<typename R::output_type>;
+    using storage_type = RX_OPTIONAL<element_type>; 
     using output_type = const element_type&;
 
     R inner_;
-    element_type current_;
+    storage_type current_;
 
     template <class Q>
     idempotent_range(Q&& inner) : inner_(std::forward<Q>(inner)) {
         if (!inner_.at_end()) {
-            current_ = inner_.get();
+            current_.emplace(inner_.get());
         }
     }
 
     constexpr output_type get() const noexcept {
-        return current_;
+        return *current_;
     }
 
     constexpr void next() noexcept {
         inner_.next();
         if (!inner_.at_end()) {
-            current_ = inner_.get();
+            current_.emplace(inner_.get());
         }
     }
 
@@ -817,7 +818,7 @@ struct transform {
         transform transform_;
         using output_type = decltype(std::declval<const F&>()((input_.get())));
         static constexpr bool is_finite = is_finite_v<InputRange>;
-        static constexpr bool is_idempotent = is_idempotent_v<InputRange>;
+        static constexpr bool is_idempotent = false; // `func` is called each time `get` is called
 
         constexpr Range(InputRange input, transform transform) noexcept
             : input_(std::move(input)), transform_(std::move(transform)) {}
@@ -1119,19 +1120,40 @@ struct ZipRange {
     constexpr explicit ZipRange(std::tuple<Tx...>&& tuple) : inputs(tuple) {}
 
     [[nodiscard]] constexpr output_type get() const noexcept {
-        return output_type(std::forward_as_tuple(std::get<Inputs>(inputs).get()...));
+        return _get(std::index_sequence_for<Inputs...>{});
     }
 
     constexpr void next() noexcept {
-        (std::get<Inputs>(inputs).next(), ...);
+        _next(std::index_sequence_for<Inputs...>{});
     }
 
     [[nodiscard]] constexpr bool at_end() const noexcept {
-        return (std::get<Inputs>(inputs).at_end() || ...);
+        return _at_end(std::index_sequence_for<Inputs...>{});
     }
 
     constexpr size_t size_hint() const noexcept {
-        return std::min({std::get<Inputs>(inputs).size_hint()...});
+        return _size_hint(std::index_sequence_for<Inputs...>{});
+    }
+
+private:
+    template <size_t... Index>
+    [[nodiscard]] constexpr output_type _get(std::index_sequence<Index...>) const noexcept {
+        return output_type(std::forward_as_tuple(std::get<Index>(inputs).get()...));
+    }
+
+    template <size_t... Index>
+    constexpr void _next(std::index_sequence<Index...>) noexcept {
+        (std::get<Index>(inputs).next(), ...);
+    }
+
+    template <size_t... Index>
+    [[nodiscard]] constexpr bool _at_end(std::index_sequence<Index...>) const noexcept {
+        return (std::get<Index>(inputs).at_end() || ...);
+    }
+
+    template <size_t... Index>
+    constexpr size_t _size_hint(std::index_sequence<Index...>) const noexcept {
+        return std::min({std::get<Index>(inputs).size_hint()...});
     }
 };
 template <class... Inputs>
@@ -2121,6 +2143,178 @@ template <class... InputRanges>
     } else {
         return ChainRange<get_range_type_t<InputRanges>...>{as_input_range(std::forward<InputRanges>(inputs))...};
     }
+}
+
+/// Create an infinite range repeating the input elements in a loop.
+///
+/// If the input is empty, the output is empty, too.
+struct cycle {
+    template <class R>
+    struct Range {
+        using output_type = typename R::output_type;
+        static constexpr bool is_finite = false;
+        static constexpr bool is_idempotent = R::is_idempotent;
+
+        const R prototype;
+        RX_OPTIONAL<R> input; // rationale: most ranges in this library are not assignable
+
+        constexpr Range(R prototype_) : prototype(std::move(prototype_)) {
+            if (RX_LIKELY(!prototype.at_end())) {
+                input.emplace(prototype);
+            }
+        }
+
+        [[nodiscard]] constexpr output_type get() const noexcept {
+            RX_ASSERT(bool(input));
+            return input->get();
+        }
+
+        [[nodiscard]] constexpr bool at_end() const noexcept {
+            return !bool(input);
+        }
+
+        constexpr void next() noexcept {
+            RX_ASSERT(bool(input));
+            input->next();
+            if (RX_UNLIKELY(input->at_end())) {
+                input.emplace(prototype);
+            }
+        }
+
+        [[nodiscard]] constexpr size_t size_hint() const noexcept {
+            return bool(input) ? std::numeric_limits<size_t>::max() : 0;
+        }
+    };
+
+    template <class R>
+    [[nodiscard]] constexpr auto operator()(R&& input) const {
+        using Inner = get_range_type_t<R>;
+        return Range<Inner>{as_input_range(std::forward<R>(input))};
+    }
+};
+
+/// Yield an infinite list of constant values once the input range is exhausted.
+template <class V>
+struct padded {
+    V value;
+    template <class Vx>
+    explicit constexpr padded(Vx&& value) noexcept : value(std::forward<Vx>(value)) {}
+
+    template <class R>
+    struct Range {
+        R input;
+        const V value;
+
+        using output_type = std::common_type_t<remove_cvref_t<get_output_type_of_t<R>>, V>;
+        static constexpr bool is_finite = false;
+        static constexpr bool is_idempotent = is_idempotent_v<R>;
+
+        template <class Rx, class Vx>
+        constexpr Range(Rx&& input, Vx&& value) noexcept
+            : input(std::forward<Rx>(input)), value(std::forward<Vx>(value)) {}
+
+        constexpr void next() {
+            if (!input.at_end()) {
+                input.next();
+            }
+        }
+
+        [[nodiscard]] constexpr output_type get() const {
+            if (!input.at_end()) {
+                return input.get();
+            } else {
+                return value;
+            }
+        }
+
+        [[nodiscard]] constexpr bool at_end() const {
+            return false;
+        }
+
+        [[nodiscard]] constexpr size_t size_hint() const noexcept {
+            return std::numeric_limits<size_t>::max();
+        }
+    };
+
+    template <class InputRange>
+    [[nodiscard]] constexpr auto operator()(InputRange&& input) const& noexcept {
+        using Inner = get_range_type_t<InputRange>;
+        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), value};
+    }
+
+    template <class InputRange>
+    [[nodiscard]] constexpr auto operator()(InputRange&& input) && noexcept {
+        using Inner = get_range_type_t<InputRange>;
+        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), std::move(value)};
+    }
+};
+template <class V>
+padded(V&)->padded<remove_cvref_t<V>>;
+template <class V>
+padded(V&&)->padded<remove_cvref_t<V>>;
+  
+template <class... Inputs>
+struct ZipLongestRange {
+    static_assert(sizeof...(Inputs) > 0);
+
+    std::tuple<Inputs...> inputs;
+    using output_type = std::tuple<RX_OPTIONAL<remove_cvref_t<typename Inputs::output_type>>...>;
+    static constexpr bool is_finite = (is_finite_v<Inputs> && ...);
+    static constexpr bool is_idempotent = (is_idempotent_v<Inputs> && ...);
+
+    template <class... Tx>
+    constexpr explicit ZipLongestRange(std::tuple<Tx...>&& tuple) : inputs(tuple) {}
+
+    [[nodiscard]] constexpr output_type get() const noexcept {
+        return _get(std::index_sequence_for<Inputs...>{});
+    }
+
+    constexpr void next() noexcept {
+        _next(std::index_sequence_for<Inputs...>{});
+    }
+
+    [[nodiscard]] constexpr bool at_end() const noexcept {
+        return _at_end(std::index_sequence_for<Inputs...>{});
+    }
+
+    constexpr size_t size_hint() const noexcept {
+        return _size_hint(std::index_sequence_for<Inputs...>{});
+    }
+
+private:
+    template <size_t... Index>
+    [[nodiscard]] constexpr output_type _get(std::index_sequence<Index...>) const noexcept {
+        return output_type(std::forward_as_tuple((std::get<Index>(inputs) | first())...));
+    }
+
+    template <size_t... Index>
+    constexpr void _next(std::index_sequence<Index...>) noexcept {
+        ((std::get<Index>(inputs).at_end() ? 0 : (std::get<Index>(inputs).next(), 0)), ...);
+    }
+
+    template <size_t... Index>
+    [[nodiscard]] constexpr bool _at_end(std::index_sequence<Index...>) const noexcept {
+        return (std::get<Index>(inputs).at_end() && ...);
+    }
+
+    template <size_t... Index>
+    constexpr size_t _size_hint(std::index_sequence<Index...>) const noexcept {
+        return std::max({std::get<Index>(inputs).size_hint()...});
+    }
+};
+template <class... Inputs>
+ZipLongestRange(std::tuple<Inputs...> &&)->ZipLongestRange<remove_cvref_t<Inputs>...>;
+
+/*!
+    @brief Zip two or more ranges, return longest range.
+    Until all of the ranges are at end, produce a tuple of an element from each range.
+    The ranges are not required to produce the same number of elements, and elements will be
+    produced until all of the ranges reach their end. Ranges that ended earlier produce nullopt.
+*/
+template <class... Inputs>
+[[nodiscard]] constexpr auto zip_longest(Inputs&&... inputs) noexcept {
+    // For some reason, argument deduction doesn't work here.
+    return ZipLongestRange(std::forward_as_tuple(as_input_range(std::forward<Inputs>(inputs))...));
 }
 
 } // namespace RX_NAMESPACE
