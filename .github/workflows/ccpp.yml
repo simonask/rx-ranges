@@ -53,7 +53,7 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: install dependencies
-      run: '& "$Env:VCPKG_INSTALLATION_ROOT" install doctest:x64-windows benchmark:x64-windows'
+      run: '& "$Env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install doctest:x64-windows benchmark:x64-windows'
     - name: make build dir
       run: md build
     - name: configure
