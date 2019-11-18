@@ -650,6 +650,11 @@ constexpr auto as_idempotent_input_range(R&& range) {
 template <class T>
 using get_range_type_t = remove_cvref_t<decltype(as_input_range(std::declval<T>()))>;
 
+// This function is analogous to get_range_type_t. Instead the result of as_input_range() it tells
+// you the result of as_idempotent_input_range().
+template <class T>
+using get_idempotent_range_type_t = remove_cvref_t<decltype(as_idempotent_input_range(std::declval<T>()))>;
+
 // Get the output type of T as if it was converted to a range. This is the output type of the input
 // range after conversion through `as_input_range()`.
 template <class T>
@@ -924,15 +929,13 @@ struct filter {
 
     template <class InputRange>
     [[nodiscard]] constexpr auto operator()(InputRange&& input) const& {
-        auto inner = as_idempotent_input_range(std::forward<InputRange>(input));
-        using Inner = decltype(inner);
-        return Range<Inner>{std::move(inner), pred};
+        using Inner = get_idempotent_range_type_t<InputRange>;
+        return Range<Inner>{as_idempotent_input_range(std::forward<InputRange>(input)), pred};
     }
     template <class InputRange>
     [[nodiscard]] constexpr auto operator()(InputRange&& input) && {
-        auto inner = as_idempotent_input_range(std::forward<InputRange>(input));
-        using Inner = decltype(inner);
-        return Range<Inner>{std::move(inner), std::move(pred)};
+        using Inner = get_idempotent_range_type_t<InputRange>;
+        return Range<Inner>{as_idempotent_input_range(std::forward<InputRange>(input)), std::move(pred)};
     }
 };
 template <class F>
@@ -1095,16 +1098,14 @@ struct until {
 
     template <class InputRange>
     constexpr auto operator()(InputRange&& input) const& {
-        auto inner = as_idempotent_input_range(std::forward<InputRange>(input));
-        using Inner = decltype(inner);
-        return Range<Inner>{std::move(inner), pred};
+        using Inner = get_idempotent_range_type_t<InputRange>;
+        return Range<Inner>{as_idempotent_input_range(std::forward<InputRange>(input)), pred};
     }
 
     template <class InputRange>
     constexpr auto operator()(InputRange&& input) && {
-        auto inner = as_idempotent_input_range(std::forward<InputRange>(input));
-        using Inner = decltype(inner);
-        return Range<Inner>{std::move(inner), std::move(pred)};
+        using Inner = get_idempotent_range_type_t<InputRange>;
+        return Range<Inner>{as_idempotent_input_range(std::forward<InputRange>(input)), std::move(pred)};
     }
 };
 template <class P>
