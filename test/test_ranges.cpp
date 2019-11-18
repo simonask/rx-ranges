@@ -586,6 +586,91 @@ TEST_CASE("ranges zip_longest") {
     CHECK(zipped == expected);
 }
 
+namespace {
+
+// NOTE: When modifying this, make sure to modify README.md as well!
+struct convert_to_string {
+    template <class Input>
+    struct Range {
+        using output_type = std::string;
+        static constexpr bool is_finite = rx::is_finite_v<Input>;
+        static constexpr bool is_idempotent = rx::is_idempotent_v<Input>;
+
+        Input input;
+        constexpr explicit Range(Input input) : input(std::move(input)) {}
+
+        [[nodiscard]] output_type get() const noexcept {
+            return std::to_string(input.get());
+        }
+
+        constexpr void next() noexcept {
+            input.next();
+        }
+
+        [[nodiscard]] constexpr bool at_end() const noexcept {
+            return input.at_end();
+        }
+
+        [[nodiscard]] constexpr size_t size_hint() const noexcept {
+            return input.size_hint();
+        }
+
+        constexpr void advance_by(size_t n) const noexcept {
+            using rx::advance_by; // Enable ADL.
+            advance_by(input, n);
+        }
+    };
+
+    template <class Input>
+    [[nodiscard]] constexpr auto operator()(Input&& input) const {
+        using Inner = decltype(rx::as_input_range(std::forward<Input>(input)));
+        return Range<Inner>(rx::as_input_range(std::forward<Input>(input)));
+    }
+};
+std::vector<std::string> convert_ints_to_sorted_strings(std::vector<int> input) {
+    return input | convert_to_string() | rx::sort() | rx::to_vector();
+}
+struct normalize {
+    template <class Input>
+    struct Range {
+        using output_type = rx::get_output_type_of_t<Input>;
+        Input input;
+        constexpr explicit Range(Input input) : input(std::move(input)) {}
+        template <class Out>
+        constexpr void sink(Out& out) && noexcept {
+            rx::sink(std::move(input), out);
+            auto square = [](auto x) { return x * x; };
+            auto length = std::sqrt(out | transform(square) | sum());
+            for (auto& x : out) {
+                x /= length;
+            }
+        }
+    };
+
+    template <class Input>
+    [[nodiscard]] constexpr auto operator()(Input&& input) const {
+        // Note: Here we are not using `as_input_range()`, because that would allocate
+        // temporary storage for each sink in a chain.
+        using Inner = rx::remove_cvref_t<Input>;
+        return Range<Inner>(std::forward<Input>(input));
+    }
+};
+
+// Using our new sink in practice:
+std::vector<double> normalize_vector(std::vector<double> input) {
+    return input | normalize() | to_vector();
+}
+} // anonymous namespace
+
+TEST_CASE("ranges doc examples test") {
+    auto strings = convert_ints_to_sorted_strings(std::vector{{3, 1, 2, 3, 4}});
+    CHECK(strings == std::vector{{"1"s, "2"s, "3"s, "3"s, "4"s}});
+
+    // length is 9 — this happens to produce exact floating point results.
+    auto normalized = normalize_vector(std::vector{{4.0, 8.0, 1.0}});
+    CHECK(normalized == std::vector{{4.0 / 9, 8.0 / 9, 1.0 / 9}});
+}
+
 /*
 TEST_CASE("ranges append to non-container [no compile]") {
     double not_a_container = 0;

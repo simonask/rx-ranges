@@ -28,7 +28,12 @@ if (RX_TEST)
     # Release falls back to RelWithDebInfo, then MinSizeRel
     set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release RelWithDebInfo MinSizeRel NoConfig "")
 
-    find_package(doctest REQUIRED)
+    if (APPLE)
+        add_subdirectory(doctest)
+    else()
+        find_package(doctest REQUIRED)
+    endif()
+
     add_executable(rx-ranges-test test/test_ranges.cpp)
     target_link_libraries(rx-ranges-test PRIVATE rx::ranges doctest::doctest)
     target_compile_definitions(rx-ranges-test PRIVATE "DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN")
@@ -39,6 +44,7 @@ if (RX_TEST)
         target_compile_options(rx-ranges-test PRIVATE -Wall -Werror -Wpedantic)
     endif()
 
+    set(Boost_NO_BOOST_CMAKE ON)
     find_package(Boost QUIET COMPONENTS date_time)
     if (Boost_FOUND)
         add_executable(rx-calendar test/calendar.cpp)
