@@ -1167,6 +1167,10 @@ struct ZipRange {
         return _size_hint(std::index_sequence_for<Inputs...>{});
     }
 
+    constexpr void advance_by(size_t n) noexcept {
+        _advance_by(std::index_sequence_for<Inputs...>{}, n);
+    }
+
 private:
     template <size_t... Index>
     [[nodiscard]] constexpr output_type _get(std::index_sequence<Index...>) const noexcept {
@@ -1188,9 +1192,10 @@ private:
         return std::min({std::get<Index>(inputs).size_hint()...});
     }
 
-    constexpr void advance_by(size_t n) noexcept {
+    template <size_t... Index>
+    constexpr void _advance_by(std::index_sequence<Index...>, size_t n) noexcept {
         using RX_NAMESPACE::advance_by;
-        (advance_by(std::get<Inputs>(inputs), n), ...);
+        (advance_by(std::get<Index>(inputs), n), ...);
     }
 };
 template <class... Inputs>

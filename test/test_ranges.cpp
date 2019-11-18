@@ -135,6 +135,10 @@ TEST_CASE("ranges zip two same") {
     };
     auto value = zip(seq(0), seq(1)) | first_n(5) | transform(add) | max();
     CHECK(value == 9);
+
+    auto advancing = zip(seq(0), seq(1)) | transform(add);
+    advance_by(advancing, 4);
+    CHECK(advancing.get() == 9);
 }
 
 TEST_CASE("ranges zip advance_by") {
