@@ -1266,7 +1266,11 @@ template <class... Inputs>
 struct in_groups_of_exactly {
     const size_t n;
 
-    constexpr explicit in_groups_of_exactly(size_t n) noexcept : n(n) {}
+    constexpr explicit in_groups_of_exactly(size_t n) : n(n) {
+        if (n == 0) {
+            throw std::runtime_error("in_groups_of_exactly(0) is not allowed");
+        }
+    }
 
     template <class R>
     struct Range {
