@@ -568,6 +568,15 @@ TEST_CASE("ranges padded") {
     CHECK(actual == expected);
 }
 
+TEST_CASE("ranges padded advance_by") {
+    auto actual = seq() | take(3) | padded(-1);
+    CHECK(actual.get() == 0);
+    advance_by(actual, 2);
+    CHECK(actual.get() == 2);
+    advance_by(actual, 1);
+    CHECK(actual.get() == -1);
+}
+
 TEST_CASE("ranges zip_longest") {
     auto input1 = seq() | first_n(5);
     auto input2 = input1 | transform(&to_string<int>);
@@ -584,6 +593,21 @@ TEST_CASE("ranges zip_longest") {
         std::make_tuple(RX_OPTIONAL<int>(), RX_OPTIONAL<std::string>(), RX_OPTIONAL(16)),
     };
     CHECK(zipped == expected);
+}
+
+TEST_CASE("ranges zip_longest advance_by") {
+    auto input1 = seq() | first_n(5);
+    auto input2 = input1 | transform(&to_string<int>);
+    auto input3 = seq(10) | first_n(7);
+    auto zipped = zip_longest(input1, input2, input3);
+    advance_by(zipped, 4);
+    auto expected1 = std::make_tuple(RX_OPTIONAL(4), RX_OPTIONAL("4"s), RX_OPTIONAL(14));
+    CHECK(zipped.get() == expected1);
+    advance_by(zipped, 2);
+    auto expected2 = std::make_tuple(RX_OPTIONAL<int>(), RX_OPTIONAL<std::string>(), RX_OPTIONAL(16));
+    CHECK(zipped.get() == expected2);
+    advance_by(zipped, 1);
+    CHECK(zipped.at_end());
 }
 
 TEST_CASE("ranges tee") {

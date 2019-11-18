@@ -2065,6 +2065,9 @@ struct ChainRange {
         return _size_hint(std::make_index_sequence<sizeof...(Rs)>{});
     }
 
+    // Note: advance_by() not specialized because we wouldn't know how far to
+    // skip into the next range.
+
 private:
     template <std::size_t... Index>
     constexpr size_t _size_hint(std::index_sequence<Index...>) const {
@@ -2170,6 +2173,8 @@ struct cycle {
         [[nodiscard]] constexpr size_t size_hint() const noexcept {
             return bool(input) ? std::numeric_limits<size_t>::max() : 0;
         }
+
+        // Note: advance_by() not specialized because we need to know when to wrap.
     };
 
     template <class R>
@@ -2222,6 +2227,11 @@ struct padded {
         [[nodiscard]] constexpr size_t size_hint() const noexcept {
             return std::numeric_limits<size_t>::max();
         }
+
+         constexpr void advance_by(size_t n) noexcept {
+             using RX_NAMESPACE::advance_by;
+             advance_by(input, n);
+         }
     };
 
     template <class InputRange>
@@ -2271,6 +2281,10 @@ struct ZipLongestRange {
         return _size_hint(std::index_sequence_for<Inputs...>{});
     }
 
+    constexpr void advance_by(size_t n) noexcept {
+        _advance_by(std::index_sequence_for<Inputs...>{}, n);
+    }
+
 private:
     template <size_t... Index>
     [[nodiscard]] constexpr output_type _get(std::index_sequence<Index...>) const noexcept {
@@ -2290,6 +2304,12 @@ private:
     template <size_t... Index>
     constexpr size_t _size_hint(std::index_sequence<Index...>) const noexcept {
         return std::max({std::get<Index>(inputs).size_hint()...});
+    }
+
+    template <size_t... Index>
+    constexpr void _advance_by(std::index_sequence<Index...>, size_t n) noexcept {
+        using RX_NAMESPACE::advance_by;
+        (advance_by(std::get<Index>(inputs), n), ...);
     }
 };
 template <class... Inputs>
@@ -2338,6 +2358,9 @@ struct tee {
         constexpr size_t size_hint() const noexcept {
             return input.size_hint();
         }
+
+        // Note: advance_by() not specialized because tee() needs to see every
+        // element.
     };
 
     template <class InputRange>
