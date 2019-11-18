@@ -749,9 +749,9 @@ seq(T, U)->seq<T, U>;
     @brief Generate infinite copies of type T.
 */
 template <class T>
-struct repeat {
+struct fill {
     T value;
-    constexpr explicit repeat(T value) noexcept : value(std::move(value)) {}
+    constexpr explicit fill(T value) noexcept : value(std::move(value)) {}
 
     using output_type = T;
     static constexpr bool is_finite = false;
@@ -772,12 +772,7 @@ struct repeat {
     }
 };
 template <class T>
-repeat(T &&)->repeat<T>;
-
-template <class T>
-[[nodiscard]] constexpr auto fill(T&& v) {
-    return repeat(std::forward<T>(v));
-}
+fill(T &&)->fill<T>;
 
 /*!
     @brief Generate N copies of type T.
@@ -785,7 +780,7 @@ template <class T>
     This is equivalent to `fill(value) | take(n)`.
 */
 template <class T>
-struct repeat_n {
+struct fill_n {
     using output_type = const T&;
     static constexpr bool is_finite = true;
     static constexpr bool is_idempotent = true;
@@ -793,7 +788,7 @@ struct repeat_n {
     T value;
     size_t n;
     size_t i = 0;
-    constexpr explicit repeat_n(size_t n, T value) : value(std::move(value)), n(n) {}
+    constexpr explicit fill_n(size_t n, T value) : value(std::move(value)), n(n) {}
 
     constexpr void next() {
         RX_ASSERT(!at_end());
@@ -811,12 +806,7 @@ struct repeat_n {
     }
 };
 template <class T>
-repeat_n(size_t, T &&)->repeat_n<T>;
-
-template <class T>
-[[nodiscard]] constexpr auto fill_n(size_t n, T&& v) noexcept {
-    return repeat_n(n, std::forward<T>(v));
-}
+fill_n(T &&)->fill_n<T>;
 
 /*!
     @brief Transform a range of values by a function F.
