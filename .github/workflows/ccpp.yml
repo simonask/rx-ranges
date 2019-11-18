@@ -61,7 +61,9 @@ jobs:
     - name: build
       run: cd build; cmake --build . --config Debug; cd ..
     - name: run tests
-      run: build/Debug/rx-ranges-test.exe; build/Debug/rx-calendar.exe
+      run: build/Debug/rx-ranges-test.exe
+    - name: run calendar example
+      run: build/Debug/rx-calendar.exe
   GCC9-Benchmark:
     runs-on: ubuntu-latest
     steps:
@@ -103,7 +105,9 @@ jobs:
     - name: build
       run: cd build; cmake --build . --config Release; cd ..
     - name: run tests
-      run: build/Release/rx-ranges-test.exe; build/Release/rx-benchmark.exe
+      run: build/Release/rx-ranges-test.exe
+    - name: run benchmarks
+      run: build/Release/rx-benchmark.exe
   # TODO: libbenchmark is built with libstdc++, so this segfaults on startup. We need to build
   # libbenchmark ourselves.
   # Clang8-libcxx-Benchmark:
