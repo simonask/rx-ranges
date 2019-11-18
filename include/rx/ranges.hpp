@@ -775,40 +775,6 @@ template <class T>
 fill(T&&)->fill<remove_cvref_t<T>>;
 
 /*!
-    @brief Generate N copies of type T.
-
-    This is equivalent to `fill(value) | take(n)`.
-*/
-template <class T>
-struct fill_n {
-    using output_type = const T&;
-    static constexpr bool is_finite = true;
-    static constexpr bool is_idempotent = true;
-
-    T value;
-    size_t n;
-    size_t i = 0;
-    constexpr explicit fill_n(size_t n, T value) : value(std::move(value)), n(n) {}
-
-    constexpr void next() {
-        RX_ASSERT(!at_end());
-        ++i;
-    }
-    [[nodiscard]] constexpr output_type get() const noexcept {
-        RX_ASSERT(!at_end());
-        return value;
-    }
-    [[nodiscard]] constexpr bool at_end() const noexcept {
-        return i == n;
-    }
-    constexpr size_t size_hint() const noexcept {
-        return n;
-    }
-};
-template <class T>
-fill_n(T&&)->fill_n<remove_cvref_t<T>>;
-
-/*!
     @brief Transform a range of values by a function F.
 
     Each output is produced by passing the output of the inner range to the function F.
@@ -990,6 +956,16 @@ struct take {
         return Range<Inner>{as_input_range(std::forward<InputRange>(input)), n};
     }
 };
+
+/*!
+    @brief Generate N copies of type T.
+
+    This is equivalent to `fill(value) | take(n)`.
+*/
+template <class T>
+constexpr auto fill_n(size_t n, T&& v) {
+    return fill(std::forward<T>(v)) | take(n);
+}
 
 /// Alias for `take()`.
 using first_n = take;
