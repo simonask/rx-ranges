@@ -307,6 +307,46 @@ namespace detail {
     struct invalid_type {};
 } // namespace detail
 
+template <class In, class Out>
+constexpr void sink_one(In&& in, Out& out) noexcept {
+    static_assert(
+        has_emplace_back_v<Out> || has_push_back_v<Out> || has_emplace_v<Out>,
+        "Output supports neither emplace_back(), push_back(), nor emplace().");
+
+    // Copy elements from the input to the output. If the input is tuple-like, and the output
+    // supports emplacement, the tuple will be unpacked and passed as individual arguments to the
+    // emplace member function on the output. Otherwise, the tuple-like object will be passed as-is.
+    //
+    // This means that both linear containers of tuples and associative containers like maps will
+    // work as outputs.
+
+    if constexpr (has_emplace_back_v<Out>) {
+        if constexpr (is_tuple_like_v<In>) {
+            // Output has emplace_back, and the input generates tuple-like elements. Pass tuple
+            // elements as individual arguments to emplace_back.
+            auto unpack = [&](auto&&... args) constexpr {
+                out.emplace_back(std::forward<decltype(args)>(args)...);
+            };
+            std::apply(unpack, std::forward<In>(in));
+        } else {
+            out.emplace_back(std::forward<In>(in));
+        }
+    } else if constexpr (has_push_back_v<Out>) {
+        out.push_back(std::forward<In>(in));
+    } else if constexpr (has_emplace_v<Out>) {
+        if constexpr (is_tuple_like_v<In>) {
+            // Output has emplace, and the input generates tuple-like elements. Pass tuple
+            // elements as individual arguments to emplace.
+            auto unpack = [&](auto&&... args) constexpr {
+                out.emplace(std::forward<decltype(args)>(args)...);
+            };
+            std::apply(unpack, std::forward<In>(in));
+        } else {
+            out.emplace(std::forward<In>(in));
+        }
+    }
+}
+
 /// Copy elements from an rvalue InputRange to output.
 ///
 /// If an input range is chained with a sink (like `sort()`), this will the initial population of
@@ -328,50 +368,13 @@ constexpr void sink(
     Out& out,
     std::enable_if_t<!std::is_lvalue_reference_v<In> && is_input_range_v<In>>* = nullptr) noexcept {
     RX_TYPE_ASSERT(is_finite<remove_cvref_t<In>>);
-    using output_type = typename remove_cvref_t<In>::output_type;
 
     if constexpr (has_reserve_v<Out>) {
         out.reserve(in.size_hint());
     }
 
-    // Copy elements from the input to the output. If the input is tuple-like, and the output
-    // supports emplacement, the tuple will be unpacked and passed as individual arguments to the
-    // emplace member function on the output. Otherwise, the tuple-like object will be passed as-is.
-    //
-    // This means that both linear containers of tuples and associative containers like maps will
-    // work as outputs.
-
-    static_assert(
-        has_emplace_back_v<Out> || has_push_back_v<Out> || has_emplace_v<Out>,
-        "Output supports neither emplace_back(), push_back(), nor emplace().");
-
     while (RX_LIKELY(!in.at_end())) {
-        if constexpr (has_emplace_back_v<Out>) {
-            if constexpr (is_tuple_like_v<output_type>) {
-                // Output has emplace_back, and the input generates tuple-like elements. Pass tuple
-                // elements as individual arguments to emplace_back.
-                auto unpack = [&](auto&&... args) constexpr {
-                    out.emplace_back(std::forward<decltype(args)>(args)...);
-                };
-                std::apply(unpack, in.get());
-            } else {
-                out.emplace_back(in.get());
-            }
-        } else if constexpr (has_push_back_v<Out>) {
-            out.push_back(in.get());
-        } else if constexpr (has_emplace_v<Out>) {
-            if constexpr (is_tuple_like_v<output_type>) {
-                // Output has emplace, and the input generates tuple-like elements. Pass tuple
-                // elements as individual arguments to emplace.
-                auto unpack = [&](auto&&... args) constexpr {
-                    out.emplace(std::forward<decltype(args)>(args)...);
-                };
-                std::apply(unpack, in.get());
-            } else {
-                out.emplace(in.get());
-            }
-        }
-
+        sink_one(in.get(), out);
         in.next();
     }
 }
