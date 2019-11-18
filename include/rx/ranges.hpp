@@ -1020,8 +1020,19 @@ struct take {
 
         constexpr void advance_by(size_t m) noexcept {
             using RX_NAMESPACE::advance_by;
-            i += m;
-            advance_by(inner, m);
+            // Addition beyond n and integer overflow both clamp to the end.
+            size_t check = i + m;
+            bool int_did_overflow = check < i;
+            bool bounds_did_overflow = check > n;
+
+            if (!int_did_overflow && !bounds_did_overflow) {
+                advance_by(inner, m);
+                i += m;
+            } else if (i != n) {
+                advance_by(inner, n - i);
+                i = n;
+            }
+            RX_ASSERT((!int_did_overflow && !bounds_did_overflow) || at_end());
         }
     };
 

@@ -24,6 +24,16 @@ std::string to_string(T val) {
 //     CHECK(s == "123");
 // }
 
+TEST_CASE("range take advance_by overflow") {
+    auto bounds = seq() | take(10);
+    advance_by(bounds, 11);
+    CHECK(bounds.i == bounds.n);
+
+    auto arithmetic = seq() | take(10);
+    advance_by(arithmetic, std::numeric_limits<size_t>::max());
+    CHECK(arithmetic.i == arithmetic.n);
+}
+
 TEST_CASE("range transform") {
     auto input = std::vector{{1, 2, 3, 4}};
     auto strings = input | transform(&to_string<int>) | to_vector();
@@ -330,7 +340,7 @@ TEST_CASE("ranges reverse") {
 }
 
 TEST_CASE("ranges in_groups_of_exactly, dynamic size") {
-    auto input = seq<float>() | take(1000) | to_vector();
+    auto input = seq<float>() | take(1001) | to_vector();
 
     size_t num_groups = input | in_groups_of_exactly(4) | count();
     CHECK(num_groups == 250);
@@ -350,7 +360,8 @@ TEST_CASE("ranges in_groups_of_exactly, dynamic size") {
 
     std::array<float, 4> expected_sums = {0.f, 0.f, 0.f, 0.f};
     for (auto [i, x] : enumerate(input)) {
-        expected_sums[i % 4] += x;
+        if (i != 1000)
+            expected_sums[i % 4] += x;
     }
 
     CHECK(sums == expected_sums);
