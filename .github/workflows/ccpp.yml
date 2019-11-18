@@ -59,7 +59,7 @@ jobs:
     - name: configure
       run: 'cd build; cmake .. -DCMAKE_TOOLCHAIN_FILE="$Env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows -G "Visual Studio 16 2019" -DCMAKE_PLATFORM_ARCH=x64 -DRX_TEST=ON; cd ..'
     - name: build
-      run: cmake --build . --config Debug
+      run: cd build; cmake --build . --config Debug; cd ..
     - name: run tests
       run: build/Debug/rx-ranges-test.exe; build/Debug/rx-calendar.exe
   GCC9-Benchmark:
