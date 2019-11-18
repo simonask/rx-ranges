@@ -383,11 +383,7 @@ TEST_CASE("ranges in_groups_of") {
     float last = 0.f;
     auto groups = input | in_groups_of(4);
 
-    // For some reason, MSVC does not correctly find begin()/end() via ADL in range-based for loops
-    // for this particular case. It's a bit of a mystery, since this works for all the other range
-    // types, and there doesn't seem to be any difference in how the in_groups_of() adapter works.
-    for (auto it = begin(groups); it != end(groups); ++it) {
-        auto& group = *it;
+    for (const auto& group : groups) {
         CHECK(group.size() != 0);
         if (group.size() == 4) {
             std::get<0>(sums) += group[0];
@@ -423,12 +419,8 @@ TEST_CASE("ranges group_adjacent_by") {
     size_t num_groups = groups | count();
     CHECK(num_groups == 4);
 
-    // For some reason, MSVC does not correctly find begin()/end() via ADL in range-based for loops
-    // for this particular case. It's a bit of a mystery, since this works for all the other range
-    // types, and there doesn't seem to be any difference in how the in_groups_of() adapter works.
     int previous = std::numeric_limits<int>::max();
-    for (auto it = begin(groups); it != end(groups); ++it) {
-        const auto& group = *it;
+    for (const auto& group : groups) {
         for (auto x : group) {
             CHECK(pred(x) == pred(group.get()));
             CHECK(pred(x) != previous);
