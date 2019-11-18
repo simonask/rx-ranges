@@ -446,16 +446,19 @@ struct iterator_range {
     constexpr iterator_range(It begin, EndIt end) noexcept : current_(begin), end_(end) {}
 
     constexpr void next() noexcept {
-        RX_ASSERT(current_ != end_);
+        RX_ASSERT(!at_end());
         ++current_;
     }
 
     [[nodiscard]] constexpr output_type get() const noexcept {
+        RX_ASSERT(!at_end());
         return *current_;
     }
+
     [[nodiscard]] constexpr bool at_end() const noexcept {
         return current_ == end_;
     }
+
     constexpr size_t size_hint() const noexcept {
         if constexpr (std::is_same_v<It, EndIt> && is_random_access_iterator_v<It>) {
             return end_ - current_;
@@ -498,13 +501,15 @@ struct vector_range {
         return *this;
     }
     constexpr void next() noexcept {
-        RX_ASSERT(current_ != vector_.end());
+        RX_ASSERT(!at_end());
         ++current_;
     }
     constexpr const output_type& get() const& noexcept {
+        RX_ASSERT(!at_end());
         return *current_;
     }
     constexpr output_type get() && noexcept {
+        RX_ASSERT(!at_end());
         return std::move(*current_);
     }
     constexpr bool at_end() const noexcept {
@@ -608,10 +613,12 @@ struct idempotent_range {
     }
 
     constexpr output_type get() const noexcept {
+        RX_ASSERT(!at_end());
         return *current_;
     }
 
     constexpr void next() noexcept {
+        RX_ASSERT(!at_end());
         inner_.next();
         if (!inner_.at_end()) {
             current_.emplace(inner_.get());
@@ -789,9 +796,11 @@ struct repeat_n {
     constexpr explicit repeat_n(size_t n, T value) : value(std::move(value)), n(n) {}
 
     constexpr void next() {
+        RX_ASSERT(!at_end());
         ++i;
     }
     [[nodiscard]] constexpr output_type get() const noexcept {
+        RX_ASSERT(!at_end());
         return value;
     }
     [[nodiscard]] constexpr bool at_end() const noexcept {
@@ -831,9 +840,11 @@ struct transform {
         constexpr Range(InputRange input, transform transform) noexcept
             : input_(std::move(input)), transform_(std::move(transform)) {}
         constexpr void next() {
+            RX_ASSERT(!at_end());
             input_.next();
         }
         constexpr output_type get() const {
+            RX_ASSERT(!at_end());
             return transform_.func(input_.get());
         }
         constexpr bool at_end() const {
@@ -895,14 +906,17 @@ struct filter {
         }
 
         [[nodiscard]] constexpr decltype(auto) get() const& noexcept {
+            RX_ASSERT(!at_end());
             return input_.get();
         }
 
         [[nodiscard]] constexpr decltype(auto) get() && noexcept {
+            RX_ASSERT(!at_end());
             return input_.get();
         }
 
         constexpr void next() noexcept {
+            RX_ASSERT(!at_end());
             // XXX: For some reason, compilers are not able to merge this loop condition with
             // conditions on the input range, causing many more branches than necessary. (Tested
             // with MSVC, Clang, GCC.)
@@ -961,11 +975,12 @@ struct take {
         constexpr Range(R inner, size_t n) noexcept : inner(std::move(inner)), n(n) {}
 
         [[nodiscard]] constexpr output_type get() const noexcept {
+            RX_ASSERT(!at_end());
             return inner.get();
         }
 
         constexpr void next() noexcept {
-            RX_ASSERT(!inner.at_end());
+            RX_ASSERT(!at_end());
             ++i;
             inner.next();
         }
@@ -1013,10 +1028,12 @@ struct skip_n {
         }
 
         [[nodiscard]] constexpr output_type get() const noexcept {
+            RX_ASSERT(!at_end());
             return input_.get();
         }
 
         constexpr void next() noexcept {
+            RX_ASSERT(!at_end());
             input_.next();
         }
 
@@ -1069,17 +1086,17 @@ struct until {
         }
 
         [[nodiscard]] constexpr decltype(auto) get() const& noexcept {
-            RX_ASSERT(!end);
+            RX_ASSERT(!at_end());
             return input.get();
         }
 
         [[nodiscard]] constexpr decltype(auto) get() && noexcept {
-            RX_ASSERT(!end);
+            RX_ASSERT(!at_end());
             return input.get();
         }
 
         constexpr void next() noexcept {
-            RX_ASSERT(!end);
+            RX_ASSERT(!at_end());
             input.next();
             end = input.at_end();
             if (!end) {
@@ -1124,10 +1141,12 @@ struct ZipRange {
     constexpr explicit ZipRange(std::tuple<Tx...>&& tuple) : inputs(tuple) {}
 
     [[nodiscard]] constexpr output_type get() const noexcept {
+        RX_ASSERT(!at_end());
         return _get(std::index_sequence_for<Inputs...>{});
     }
 
     constexpr void next() noexcept {
+        RX_ASSERT(!at_end());
         _next(std::index_sequence_for<Inputs...>{});
     }
 
@@ -1222,6 +1241,7 @@ struct in_groups_of_exactly<N> {
         mutable std::array<element_type, N> storage;
 
         [[nodiscard]] constexpr output_type get() const noexcept {
+            RX_ASSERT(!at_end());
             return std::move(storage);
         }
 
@@ -1230,6 +1250,7 @@ struct in_groups_of_exactly<N> {
         }
 
         constexpr void next() noexcept {
+            RX_ASSERT(!at_end());
             inner.next();
             fill_group();
         }
@@ -1296,6 +1317,7 @@ struct in_groups_of_exactly<> {
 
 
         [[nodiscard]] constexpr output_type get() const noexcept {
+            RX_ASSERT(!at_end());
             return storage;
         }
 
@@ -1304,6 +1326,7 @@ struct in_groups_of_exactly<> {
         }
 
         constexpr void next() noexcept {
+            RX_ASSERT(!at_end());
             inner.next();
             fill_group();
         }
@@ -1379,7 +1402,7 @@ struct in_groups_of {
         }
 
         [[nodiscard]] output_type get() const noexcept {
-            RX_ASSERT(storage.size() != 0);
+            RX_ASSERT(!at_end());
             return storage;
         }
 
@@ -1388,6 +1411,7 @@ struct in_groups_of {
         }
 
         void next() noexcept {
+            RX_ASSERT(!at_end());
             if (inner.at_end()) {
                 end = true;
             } else {
@@ -1462,8 +1486,8 @@ struct group_adjacent_by : private Compare {
 
         R inner;
         P pred;
-        RX_OPTIONAL<output_type>
-            storage; // rationale: most ranges in this library are not assignable
+        // rationale: most ranges in this library are not assignable
+        RX_OPTIONAL<output_type> storage;
 
         Range(R inner, P pred, Compare cmp)
             : Compare(std::move(cmp)), inner(std::move(inner)), pred(std::move(pred)) {
@@ -1471,6 +1495,7 @@ struct group_adjacent_by : private Compare {
         }
 
         [[nodiscard]] constexpr output_type get() const noexcept {
+            RX_ASSERT(!at_end());
             return *storage;
         }
 
@@ -1479,6 +1504,7 @@ struct group_adjacent_by : private Compare {
         }
 
         void next() noexcept {
+            // No at_end() test: method is called in constructor.
             if (RX_LIKELY(!inner.at_end())) {
                 fill_group();
             } else {
@@ -2169,7 +2195,7 @@ struct cycle {
         }
 
         [[nodiscard]] constexpr output_type get() const noexcept {
-            RX_ASSERT(bool(input));
+            RX_ASSERT(!at_end());
             return input->get();
         }
 
@@ -2178,7 +2204,7 @@ struct cycle {
         }
 
         constexpr void next() noexcept {
-            RX_ASSERT(bool(input));
+            RX_ASSERT(!at_end());
             input->next();
             if (RX_UNLIKELY(input->at_end())) {
                 input.emplace(prototype);
@@ -2218,12 +2244,14 @@ struct padded {
             : input(std::forward<Rx>(input)), value(std::forward<Vx>(value)) {}
 
         constexpr void next() {
+            RX_ASSERT(!at_end());
             if (!input.at_end()) {
                 input.next();
             }
         }
 
         [[nodiscard]] constexpr output_type get() const {
+            RX_ASSERT(!at_end());
             if (!input.at_end()) {
                 return input.get();
             } else {
@@ -2270,10 +2298,12 @@ struct ZipLongestRange {
     constexpr explicit ZipLongestRange(std::tuple<Tx...>&& tuple) : inputs(tuple) {}
 
     [[nodiscard]] constexpr output_type get() const noexcept {
+        RX_ASSERT(!at_end());
         return _get(std::index_sequence_for<Inputs...>{});
     }
 
     constexpr void next() noexcept {
+        RX_ASSERT(!at_end());
         _next(std::index_sequence_for<Inputs...>{});
     }
 
