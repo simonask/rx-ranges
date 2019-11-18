@@ -1050,45 +1050,14 @@ using first_n = take;
     @brief Create a range that skips the first N elements of its input.
 */
 struct skip_n {
-    size_t n;
+    const size_t n;
     constexpr explicit skip_n(size_t n) noexcept : n(n) {}
 
     template <class InputRange>
-    struct Range {
-        InputRange input_;
-        using output_type = typename InputRange::output_type;
-        static constexpr bool is_finite = is_finite_v<InputRange>;
-        static constexpr bool is_idempotent = is_idempotent_v<InputRange>;
-
-        constexpr Range(InputRange input, size_t n) noexcept : input_(std::move(input)) {
-            advance_by(n);
-        }
-
-        [[nodiscard]] constexpr output_type get() const noexcept {
-            return input_.get();
-        }
-
-        constexpr void next() noexcept {
-            input_.next();
-        }
-
-        constexpr bool at_end() const noexcept {
-            return input_.at_end();
-        }
-
-        constexpr size_t size_hint() const noexcept {
-            return input_.size_hint();
-        }
-
-        constexpr void advance_by(size_t n) noexcept {
-            using RX_NAMESPACE::advance_by;
-            advance_by(input_, n);
-        }
-    };
-    template <class InputRange>
     [[nodiscard]] constexpr auto operator()(InputRange&& input) const {
-        using Inner = get_range_type_t<InputRange>;
-        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), n};
+        auto range = as_input_range(std::forward<InputRange>(input));
+        advance_by(range, n);
+        return range;
     }
 };
 
