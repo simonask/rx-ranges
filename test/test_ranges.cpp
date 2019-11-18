@@ -563,6 +563,18 @@ TEST_CASE("ranges zip_longest") {
     CHECK(zipped == expected);
 }
 
+TEST_CASE("ranges tee") {
+    auto container1 = std::vector(0, 0);
+    auto container2 = std::vector(0, 0);
+    seq() | tee(container1) | take(10) | append(container2);
+    CHECK(container1 == container2);
+
+    container1.clear();
+    auto value = seq() | tee(container1) | take(10) | sum();
+    CHECK(container1 == container2);
+    CHECK(value == 9 * 10 / 2);
+}
+
 /*
 TEST_CASE("ranges append to non-container [no compile]") {
     double not_a_container = 0;
