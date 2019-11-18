@@ -1343,11 +1343,8 @@ struct in_groups_of_exactly {
 /*!
     @brief Produce sequential groups of N or fewer elements.
 
-    The output type is `std::vector<N>` const reference, where T is the output type of the inner
-    range (without cvref-qualifiers), and the size of the result is never greater than N.
-
-    If the input produces a number of inputs that is not divisible by N, the last group produces
-    will have a size < N.
+    The output type is a range producing at most N elements. If the input produces a number of
+    inputs that is not divisible by N, the last group produces will have a size < N.
 */
 struct in_groups_of {
     size_t n;
