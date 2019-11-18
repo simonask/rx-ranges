@@ -1277,21 +1277,19 @@ struct in_groups_of_exactly {
 
         constexpr void next() noexcept {
             storage.reset();
-            if (!inner.at_end()) {
+            if (RX_LIKELY(!inner.at_end())) {
                 auto copy = as_input_range(inner);
                 using RX_NAMESPACE::advance_by;
-                if (n > 1) {
+                if (RX_LIKELY(n > 1)) {
                     advance_by(inner, n - 1);
                     if (inner.at_end()) {
                         // end was reached before we could produce a whole group.
                         storage.reset();
                         return;
                     }
-                    inner.next();
-                } else {
-                    // n cannot be zero
-                    inner.next();
                 }
+                // n cannot be zero
+                inner.next();
                 storage.emplace(std::move(copy) | take(n));
             }
         }
