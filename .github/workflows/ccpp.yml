@@ -57,7 +57,7 @@ jobs:
     - name: make build dir
       run: md build
     - name: configure
-      run: 'cd build; cmake .. -DCMAKE_TOOLCHAIN_FILE="$Env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -GNinja -DRX_TEST=ON -DCMAKE_BUILD_TYPE=Debug; cd ..'
+      run: 'cd build; cmake .. -DCMAKE_TOOLCHAIN_FILE="$Env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows -GNinja -DRX_TEST=ON -DCMAKE_BUILD_TYPE=Debug; cd ..'
     - name: build
       run: ninja -C build
     - name: run tests
