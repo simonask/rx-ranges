@@ -329,6 +329,46 @@ namespace detail {
     struct invalid_type {};
 } // namespace detail
 
+template <class In, class Out>
+constexpr void sink_one(In&& in, Out& out) noexcept {
+    static_assert(
+        has_emplace_back_v<Out> || has_push_back_v<Out> || has_emplace_v<Out>,
+        "Output supports neither emplace_back(), push_back(), nor emplace().");
+
+    // Copy elements from the input to the output. If the input is tuple-like, and the output
+    // supports emplacement, the tuple will be unpacked and passed as individual arguments to the
+    // emplace member function on the output. Otherwise, the tuple-like object will be passed as-is.
+    //
+    // This means that both linear containers of tuples and associative containers like maps will
+    // work as outputs.
+
+    if constexpr (has_emplace_back_v<Out>) {
+        if constexpr (is_tuple_like_v<In>) {
+            // Output has emplace_back, and the input generates tuple-like elements. Pass tuple
+            // elements as individual arguments to emplace_back.
+            auto unpack = [&](auto&&... args) constexpr {
+                out.emplace_back(std::forward<decltype(args)>(args)...);
+            };
+            std::apply(unpack, std::forward<In>(in));
+        } else {
+            out.emplace_back(std::forward<In>(in));
+        }
+    } else if constexpr (has_push_back_v<Out>) {
+        out.push_back(std::forward<In>(in));
+    } else if constexpr (has_emplace_v<Out>) {
+        if constexpr (is_tuple_like_v<In>) {
+            // Output has emplace, and the input generates tuple-like elements. Pass tuple
+            // elements as individual arguments to emplace.
+            auto unpack = [&](auto&&... args) constexpr {
+                out.emplace(std::forward<decltype(args)>(args)...);
+            };
+            std::apply(unpack, std::forward<In>(in));
+        } else {
+            out.emplace(std::forward<In>(in));
+        }
+    }
+}
+
 /// Copy elements from an rvalue InputRange to output.
 ///
 /// If an input range is chained with a sink (like `sort()`), this will the initial population of
@@ -350,50 +390,13 @@ constexpr void sink(
     Out& out,
     std::enable_if_t<!std::is_lvalue_reference_v<In> && is_input_range_v<In>>* = nullptr) noexcept {
     RX_TYPE_ASSERT(is_finite<remove_cvref_t<In>>);
-    using output_type = typename remove_cvref_t<In>::output_type;
 
     if constexpr (has_reserve_v<Out>) {
         out.reserve(in.size_hint());
     }
 
-    // Copy elements from the input to the output. If the input is tuple-like, and the output
-    // supports emplacement, the tuple will be unpacked and passed as individual arguments to the
-    // emplace member function on the output. Otherwise, the tuple-like object will be passed as-is.
-    //
-    // This means that both linear containers of tuples and associative containers like maps will
-    // work as outputs.
-
-    static_assert(
-        has_emplace_back_v<Out> || has_push_back_v<Out> || has_emplace_v<Out>,
-        "Output supports neither emplace_back(), push_back(), nor emplace().");
-
     while (RX_LIKELY(!in.at_end())) {
-        if constexpr (has_emplace_back_v<Out>) {
-            if constexpr (is_tuple_like_v<output_type>) {
-                // Output has emplace_back, and the input generates tuple-like elements. Pass tuple
-                // elements as individual arguments to emplace_back.
-                auto unpack = [&](auto&&... args) constexpr {
-                    out.emplace_back(std::forward<decltype(args)>(args)...);
-                };
-                std::apply(unpack, in.get());
-            } else {
-                out.emplace_back(in.get());
-            }
-        } else if constexpr (has_push_back_v<Out>) {
-            out.push_back(in.get());
-        } else if constexpr (has_emplace_v<Out>) {
-            if constexpr (is_tuple_like_v<output_type>) {
-                // Output has emplace, and the input generates tuple-like elements. Pass tuple
-                // elements as individual arguments to emplace.
-                auto unpack = [&](auto&&... args) constexpr {
-                    out.emplace(std::forward<decltype(args)>(args)...);
-                };
-                std::apply(unpack, in.get());
-            } else {
-                out.emplace(in.get());
-            }
-        }
-
+        sink_one(in.get(), out);
         in.next();
     }
 }
@@ -465,16 +468,19 @@ struct iterator_range {
     constexpr iterator_range(It begin, EndIt end) noexcept : current_(begin), end_(end) {}
 
     constexpr void next() noexcept {
-        RX_ASSERT(current_ != end_);
+        RX_ASSERT(!at_end());
         ++current_;
     }
 
     [[nodiscard]] constexpr output_type get() const noexcept {
+        RX_ASSERT(!at_end());
         return *current_;
     }
+
     [[nodiscard]] constexpr bool at_end() const noexcept {
         return current_ == end_;
     }
+
     constexpr size_t size_hint() const noexcept {
         if constexpr (std::is_same_v<It, EndIt> && is_random_access_iterator_v<It>) {
             return end_ - current_;
@@ -530,13 +536,15 @@ struct vector_range {
         return *this;
     }
     constexpr void next() noexcept {
-        RX_ASSERT(current_ != vector_.end());
+        RX_ASSERT(!at_end());
         ++current_;
     }
     constexpr const output_type& get() const& noexcept {
+        RX_ASSERT(!at_end());
         return *current_;
     }
     constexpr output_type get() && noexcept {
+        RX_ASSERT(!at_end());
         return std::move(*current_);
     }
     constexpr bool at_end() const noexcept {
@@ -647,10 +655,12 @@ struct idempotent_range {
     }
 
     constexpr output_type get() const noexcept {
+        RX_ASSERT(!at_end());
         return *current_;
     }
 
     constexpr void next() noexcept {
+        RX_ASSERT(!at_end());
         inner_.next();
         if (!inner_.at_end()) {
             current_.emplace(inner_.get());
@@ -688,6 +698,11 @@ constexpr auto as_idempotent_input_range(R&& range) {
 // different type by `as_input_range()`, such as standard containers.
 template <class T>
 using get_range_type_t = remove_cvref_t<decltype(as_input_range(std::declval<T>()))>;
+
+// This function is analogous to get_range_type_t. Instead the result of as_input_range() it tells
+// you the result of as_idempotent_input_range().
+template <class T>
+using get_idempotent_range_type_t = remove_cvref_t<decltype(as_idempotent_input_range(std::declval<T>()))>;
 
 // Get the output type of T as if it was converted to a range. This is the output type of the input
 // range after conversion through `as_input_range()`.
@@ -823,9 +838,11 @@ struct repeat_n {
     constexpr explicit repeat_n(size_t n, T value) : value(std::move(value)), n(n) {}
 
     constexpr void next() {
+        RX_ASSERT(!at_end());
         ++i;
     }
     [[nodiscard]] constexpr output_type get() const noexcept {
+        RX_ASSERT(!at_end());
         return value;
     }
     [[nodiscard]] constexpr bool at_end() const noexcept {
@@ -865,9 +882,11 @@ struct transform {
         constexpr Range(InputRange input, transform transform) noexcept
             : input_(std::move(input)), transform_(std::move(transform)) {}
         constexpr void next() {
+            RX_ASSERT(!at_end());
             input_.next();
         }
         constexpr output_type get() const {
+            RX_ASSERT(!at_end());
             return transform_.func(input_.get());
         }
         constexpr bool at_end() const {
@@ -933,14 +952,17 @@ struct filter {
         }
 
         [[nodiscard]] constexpr decltype(auto) get() const& noexcept {
+            RX_ASSERT(!at_end());
             return input_.get();
         }
 
         [[nodiscard]] constexpr decltype(auto) get() && noexcept {
+            RX_ASSERT(!at_end());
             return input_.get();
         }
 
         constexpr void next() noexcept {
+            RX_ASSERT(!at_end());
             // XXX: For some reason, compilers are not able to merge this loop condition with
             // conditions on the input range, causing many more branches than necessary. (Tested
             // with MSVC, Clang, GCC.)
@@ -967,15 +989,13 @@ struct filter {
 
     template <class InputRange>
     [[nodiscard]] constexpr auto operator()(InputRange&& input) const& {
-        auto inner = as_idempotent_input_range(std::forward<InputRange>(input));
-        using Inner = decltype(inner);
-        return Range<Inner>{std::move(inner), pred};
+        using Inner = get_idempotent_range_type_t<InputRange>;
+        return Range<Inner>{as_idempotent_input_range(std::forward<InputRange>(input)), pred};
     }
     template <class InputRange>
     [[nodiscard]] constexpr auto operator()(InputRange&& input) && {
-        auto inner = as_idempotent_input_range(std::forward<InputRange>(input));
-        using Inner = decltype(inner);
-        return Range<Inner>{std::move(inner), std::move(pred)};
+        using Inner = get_idempotent_range_type_t<InputRange>;
+        return Range<Inner>{as_idempotent_input_range(std::forward<InputRange>(input)), std::move(pred)};
     }
 };
 template <class F>
@@ -1001,11 +1021,12 @@ struct take {
         constexpr Range(R inner, size_t n) noexcept : inner(std::move(inner)), n(n) {}
 
         [[nodiscard]] constexpr output_type get() const noexcept {
+            RX_ASSERT(!at_end());
             return inner.get();
         }
 
         constexpr void next() noexcept {
-            RX_ASSERT(!inner.at_end());
+            RX_ASSERT(!at_end());
             ++i;
             inner.next();
         }
@@ -1095,17 +1116,17 @@ struct until {
         }
 
         [[nodiscard]] constexpr decltype(auto) get() const& noexcept {
-            RX_ASSERT(!end);
+            RX_ASSERT(!at_end());
             return input.get();
         }
 
         [[nodiscard]] constexpr decltype(auto) get() && noexcept {
-            RX_ASSERT(!end);
+            RX_ASSERT(!at_end());
             return input.get();
         }
 
         constexpr void next() noexcept {
-            RX_ASSERT(!end);
+            RX_ASSERT(!at_end());
             input.next();
             end = input.at_end();
             if (!end) {
@@ -1124,16 +1145,14 @@ struct until {
 
     template <class InputRange>
     constexpr auto operator()(InputRange&& input) const& {
-        auto inner = as_idempotent_input_range(std::forward<InputRange>(input));
-        using Inner = decltype(inner);
-        return Range<Inner>{std::move(inner), pred};
+        using Inner = get_idempotent_range_type_t<InputRange>;
+        return Range<Inner>{as_idempotent_input_range(std::forward<InputRange>(input)), pred};
     }
 
     template <class InputRange>
     constexpr auto operator()(InputRange&& input) && {
-        auto inner = as_idempotent_input_range(std::forward<InputRange>(input));
-        using Inner = decltype(inner);
-        return Range<Inner>{std::move(inner), std::move(pred)};
+        using Inner = get_idempotent_range_type_t<InputRange>;
+        return Range<Inner>{as_idempotent_input_range(std::forward<InputRange>(input)), std::move(pred)};
     }
 };
 template <class P>
@@ -1152,10 +1171,12 @@ struct ZipRange {
     constexpr explicit ZipRange(std::tuple<Tx...>&& tuple) : inputs(tuple) {}
 
     [[nodiscard]] constexpr output_type get() const noexcept {
+        RX_ASSERT(!at_end());
         return _get(std::index_sequence_for<Inputs...>{});
     }
 
     constexpr void next() noexcept {
+        RX_ASSERT(!at_end());
         _next(std::index_sequence_for<Inputs...>{});
     }
 
@@ -1264,10 +1285,12 @@ struct in_groups_of_exactly {
 
 
         [[nodiscard]] constexpr output_type get() const& noexcept {
+            RX_ASSERT(!at_end());
             return *storage;
         }
 
         [[nodiscard]] constexpr output_type get() && noexcept {
+            RX_ASSERT(!at_end());
             return std::move(*storage);
         }
 
@@ -1344,10 +1367,12 @@ struct in_groups_of {
         }
 
         [[nodiscard]] output_type get() const& noexcept {
+            RX_ASSERT(!at_end());
             return *storage;
         }
 
         [[nodiscard]] output_type get() && noexcept {
+            RX_ASSERT(!at_end());
             return std::move(*storage);
         }
 
@@ -1417,8 +1442,8 @@ struct group_adjacent_by : private Compare {
 
         R inner;
         P pred;
-        RX_OPTIONAL<output_type>
-            storage; // rationale: most ranges in this library are not assignable
+        // rationale: most ranges in this library are not assignable
+        RX_OPTIONAL<output_type> storage;
 
         Range(R inner, P pred, Compare cmp)
             : Compare(std::move(cmp)), inner(std::move(inner)), pred(std::move(pred)) {
@@ -1426,6 +1451,7 @@ struct group_adjacent_by : private Compare {
         }
 
         [[nodiscard]] constexpr output_type get() const noexcept {
+            RX_ASSERT(!at_end());
             return *storage;
         }
 
@@ -1434,6 +1460,7 @@ struct group_adjacent_by : private Compare {
         }
 
         void next() noexcept {
+            // No at_end() test: method is called in constructor.
             if (RX_LIKELY(!inner.at_end())) {
                 fill_group();
             } else {
@@ -2124,7 +2151,7 @@ struct cycle {
         }
 
         [[nodiscard]] constexpr output_type get() const noexcept {
-            RX_ASSERT(bool(input));
+            RX_ASSERT(!at_end());
             return input->get();
         }
 
@@ -2133,7 +2160,7 @@ struct cycle {
         }
 
         constexpr void next() noexcept {
-            RX_ASSERT(bool(input));
+            RX_ASSERT(!at_end());
             input->next();
             if (RX_UNLIKELY(input->at_end())) {
                 input.emplace(prototype);
@@ -2173,12 +2200,14 @@ struct padded {
             : input(std::forward<Rx>(input)), value(std::forward<Vx>(value)) {}
 
         constexpr void next() {
+            RX_ASSERT(!at_end());
             if (!input.at_end()) {
                 input.next();
             }
         }
 
         [[nodiscard]] constexpr output_type get() const {
+            RX_ASSERT(!at_end());
             if (!input.at_end()) {
                 return input.get();
             } else {
@@ -2225,10 +2254,12 @@ struct ZipLongestRange {
     constexpr explicit ZipLongestRange(std::tuple<Tx...>&& tuple) : inputs(tuple) {}
 
     [[nodiscard]] constexpr output_type get() const noexcept {
+        RX_ASSERT(!at_end());
         return _get(std::index_sequence_for<Inputs...>{});
     }
 
     constexpr void next() noexcept {
+        RX_ASSERT(!at_end());
         _next(std::index_sequence_for<Inputs...>{});
     }
 
@@ -2275,6 +2306,48 @@ template <class... Inputs>
     // For some reason, argument deduction doesn't work here.
     return ZipLongestRange(std::forward_as_tuple(as_input_range(std::forward<Inputs>(inputs))...));
 }
+
+/// Copy values of a range into a container during iteration.
+template <class Dest>
+struct tee {
+    Dest& dest;
+    explicit constexpr tee(Dest& dest) noexcept : dest(dest) {}
+
+    template <class R>
+    struct Range {
+        R input;
+        Dest& dest;
+
+        using output_type = get_output_type_of_t<R>;
+        static constexpr bool is_finite = is_finite_v<R>;
+        static constexpr bool is_idempotent = false;
+
+        constexpr void next() {
+            sink_one(input.get(), dest);
+            input.next();
+        }
+
+        constexpr output_type get() const {
+            return input.get();
+        }
+
+        constexpr bool at_end() const {
+            return input.at_end();
+        }
+
+        constexpr size_t size_hint() const noexcept {
+            return input.size_hint();
+        }
+    };
+
+    template <class InputRange>
+    [[nodiscard]] constexpr auto operator()(InputRange&& input) const noexcept {
+        using Inner = get_idempotent_range_type_t<InputRange>;
+        return Range<Inner>{as_idempotent_input_range(std::forward<InputRange>(input)), dest};
+    }
+};
+template <class Dest>
+tee(Dest&)->tee<remove_cvref_t<Dest>>;
 
 } // namespace RX_NAMESPACE
 
