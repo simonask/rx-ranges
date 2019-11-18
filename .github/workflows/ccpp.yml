@@ -57,11 +57,11 @@ jobs:
     - name: make build dir
       run: md build
     - name: configure
-      run: 'cd build; cmake .. -DCMAKE_TOOLCHAIN_FILE="$Env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows -GNinja -DRX_TEST=ON -DCMAKE_BUILD_TYPE=Debug; cd ..'
+      run: 'cd build; cmake .. -DCMAKE_TOOLCHAIN_FILE="$Env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows -G "Visual Studio 16 2019" -DCMAKE_PLATFORM_ARCH=x64 -DRX_TEST=ON; cd ..'
     - name: build
-      run: ninja -C build
+      run: cmake --build . --config Debug
     - name: run tests
-      run: build/rx-ranges-test.exe; build/rx-calendar.exe
+      run: build/Debug/rx-ranges-test.exe; build/Debug/rx-calendar.exe
   GCC9-Benchmark:
     runs-on: ubuntu-latest
     steps:
