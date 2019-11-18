@@ -102,6 +102,7 @@ following observations:
 - `padded()`: Yield an infinite list of constant values once the input range is exhausted.
 - `zip_longest()`: Produce tuples of values from multiple input ranges, until all of the ranges
   reach their end.
+- `tee()`: Copy values of a range into a container during iteration.
 
 ## TODO
 

@@ -2321,6 +2321,48 @@ template <class... Inputs>
     return ZipLongestRange(std::forward_as_tuple(as_input_range(std::forward<Inputs>(inputs))...));
 }
 
+/// Copy values of a range into a container during iteration.
+template <class Dest>
+struct tee {
+    Dest& dest;
+    explicit constexpr tee(Dest& dest) noexcept : dest(dest) {}
+
+    template <class R>
+    struct Range {
+        R input;
+        Dest& dest;
+
+        using output_type = get_output_type_of_t<R>;
+        static constexpr bool is_finite = is_finite_v<R>;
+        static constexpr bool is_idempotent = false;
+
+        constexpr void next() {
+            sink_one(input.get(), dest);
+            input.next();
+        }
+
+        constexpr output_type get() const {
+            return input.get();
+        }
+
+        constexpr bool at_end() const {
+            return input.at_end();
+        }
+
+        constexpr size_t size_hint() const noexcept {
+            return input.size_hint();
+        }
+    };
+
+    template <class InputRange>
+    [[nodiscard]] constexpr auto operator()(InputRange&& input) const noexcept {
+        using Inner = get_idempotent_range_type_t<InputRange>;
+        return Range<Inner>{as_idempotent_input_range(std::forward<InputRange>(input)), dest};
+    }
+};
+template <class Dest>
+tee(Dest&)->tee<remove_cvref_t<Dest>>;
+
 } // namespace RX_NAMESPACE
 
 #endif // RX_RANGES_HPP_INCLUDED
