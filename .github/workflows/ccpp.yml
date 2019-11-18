@@ -48,6 +48,20 @@ jobs:
       run: ninja -C build
     - name: run tests
       run: build/rx-ranges-test && build/rx-calendar
+  MSVC:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: install dependencies
+      run: & "$Env:VCPKG_INSTALLATION_ROOT" install doctest:x64-windows benchmark:x64-windows
+    - name: make build dir
+      run: md build
+    - name: configure
+      run: cd build; cmake .. -DCMAKE_TOOLCHAIN_FILE="$Env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -GNinja -DRX_TEST=ON -DCMAKE_BUILD_TYPE=Debug; cd ..
+    - name: build
+      run: ninja -C build
+    - name: run tests
+      run: build/rx-ranges-test.exe; build/rx-calendar.exe
   GCC9-Benchmark:
     runs-on: ubuntu-latest
     steps:
