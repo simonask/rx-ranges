@@ -772,7 +772,7 @@ struct fill {
     }
 };
 template <class T>
-fill(T &&)->fill<T>;
+fill(T&&)->fill<remove_cvref_t<T>>;
 
 /*!
     @brief Generate N copies of type T.
@@ -806,7 +806,7 @@ struct fill_n {
     }
 };
 template <class T>
-fill_n(T &&)->fill_n<T>;
+fill_n(T&&)->fill_n<remove_cvref_t<T>>;
 
 /*!
     @brief Transform a range of values by a function F.
