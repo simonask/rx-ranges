@@ -279,6 +279,12 @@ TEST_CASE("ranges fill") {
     std::string b;
     fill('b') | first_n(5) | append(b);
     CHECK(b == "bbbbb");
+
+    int v = 7;
+    CHECK((fill(v) | take(5) | sum()) == 7*5);
+    CHECK(v == 7);
+    CHECK((fill_n(5, v) | sum()) == 7*5);
+    CHECK(v == 7);
 }
 
 TEST_CASE("ranges sum") {
@@ -620,6 +626,15 @@ TEST_CASE("ranges tee") {
     auto value = seq() | tee(container1) | take(10) | sum();
     CHECK(container1 == container2);
     CHECK(value == 9 * 10 / 2);
+}
+
+TEST_CASE("ranges ad-hoc lambdas") {
+    auto f = [](auto&& range) {
+        return range | filter([](auto x) { return x % 2 == 1; }) | take(5);
+    };
+
+    auto result = seq() | f | to_vector();
+    CHECK(result == std::vector{{1, 3, 5, 7, 9}});
 }
 
 /*

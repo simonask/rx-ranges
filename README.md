@@ -18,8 +18,9 @@ The library makes heavy use of modern C++17 features, so a compliant C++17 compi
 
 - Arbitrary composability.
 - Constexpr-friendly.
-- No temporary heap allocations (`foo | sort() | to_vector()` only allocates into the resulting container).
-- Heap allocation minimization: `reserve()` is used on resulting containers when possible.
+- No unnecessary temporary heap allocations (`foo | sort() | to_vector()` only allocates into the
+  resulting container).
+- Heap allocation minimization: `reserve()` is used on resulting containers, when possible.
 - Open-ended generators (non-terminating, infinite ranges).
 - Re-entrancy: A non-rvalue range can be used multiple times in a function.
 - Compatible with standard containers (anything that supports `std::begin()` and `std::end()`).
@@ -29,10 +30,10 @@ The library makes heavy use of modern C++17 features, so a compliant C++17 compi
   using `operator|` would introduce ambiguous overloads.
 - No dependencies beyond the standard library.
 - Integration with foreign codebases (override hooks for `std::optional`, `std::remove_cvref_t`,
-  assertions, etc.). Can be used as a submodule.
+  assertions, etc.). Can easily be used as a submodule.
 - Compiler support for all major compilers (GCC, Clang, MSVC).
-- Zero-overhead.
-- Header-only.
+- Zero-overhead, compared to manually written loops in optimized builds.
+- Header-only, and single-header.
 
 ## Limitations (non-goals)
 
@@ -56,59 +57,90 @@ code.
 [This example on Godbolt](https://godbolt.org/z/skF3-v) is a good case study. We can make the
 following observations:
 
-- For a constant argument, GCC chooses to perform constant-folding on the loop version, but
-  not the range-based version.
-- However, Clang decides to make the opposite decision, and does constant-folding on the
-  ranges-based version, but not the loop.
-- MSVC does not do any constant-folding, but *does* auto-vectories both versions, generating
-  very similar code for both cases. MSVC also chooses to spill many registers to the stack,
-  which may or may not impact performance in vectorized code.
+- For a constant argument, GCC does constant-folding in both the loop-based and range-based
+  versions.
+- Clang is able to constant-fold the range-based version, but not the loop-based version.
+- MSVC does not do any constant-folding, but *does* auto-vectorize both versions, generating very
+  similar code. MSVC also chooses to spill many registers to the stack, which may or may not impact
+  performance in vectorized code.
 - When the compilers are not able to constant-fold, the generated code is extremely similar for
   the loop-based version and the ranges-based version.
 
 ## Algorithms
 
-- `generate()`: Generate infinite elements from lambda.
-- `seq()`: Generate an infinite sequence of elements of any arithmetic types.
-- `fill()`: Generate infinite copies of a value.
+### Generators
+
+Algorithms that generate ranges of elements. These are typically used in the beginning of a chain.
+
+- `cycle()`: Create an infinite range repeating the input elements in a loop.
+- `empty_range()`: A range that is always empty.
 - `fill_n()`: Generate `n` copies of a value (like `std::fill()`).
-- `transform()`: Transform elements from an input range with lambda (like `std::transform()`).
+- `fill()`: Generate infinite copies of a value.
+- `generate()`: Generate infinite elements by calling a user-provided function.
+- `iterator_range()`: Form a range from a pair of standard iterators.
+- `padded()`: Yield an infinite list of constant values once the input range is exhausted.
+- `seq()`: Generate an infinite sequence of elements of any arithmetic types.
+
+### Combinators
+
+Algorithms that produce ranges from the output of other ranges.
+
+- `chain()`: Return values from multiple ranges, one after another.
 - `filter()`: Produce only elements from an input range where predicate returns true.
-- `first_n()`: Produce the first `n` elements of an input range.
-- `first()`: Produce the first element as an `std::optional`.
+- `first_n()`: Alias for `take()`.
+- `group_adjacent_by()`: Produce subranges for which a user-provided function returns the same value
+  for a sequence of elements.
+- `in_groups_of()`: Produce subranges containing at least one and at most `n` elements.
+- `in_groups_of_exactly()`: Produce subranges containing exactly `n` elements, discarding elements
+  at the end if number of input elements is not divisible by `n`.
 - `skip_n()`: Produce all elements from an input range after skipping `n` elements.
+- `take()`: Produce the first `n` elements of an input range.
+- `tee()`: Copy values of a range into a container during iteration, forwarding the value unmodified
+  to the next combinator.
+- `transform()`: Transform elements from an input range with lambda (like `std::transform()`).
 - `until()`: Produce elements from an input range until a predicate returns false.
-- `zip()`: Produce tuples of values from multiple input ranges, until one of the ranges
-   reaches its end.
+- `zip_longest()`: Produce tuples of values from multiple input ranges, until all of the ranges
+  reach their end.
+- `zip()`: Produce tuples of values from multiple input ranges, until one of the ranges reaches its
+  end.
+
+### Aggregators
+
+Algorithms that produce or modify a single value from a range of elements.
+
+- `all_of()`: True if all elements matches predicate.
+- `any_of()`: True if any element matches predicate.
+- `append()`: Append the result of an input range to an arbitrary container supporting
+  `emplace_back()`, `push_back()`, or `emplace()`.
 - `count()`: Count number of elements in an input range.
+- `first()`: Produce the first element as an `std::optional`.
 - `foldl()`: Fold-left with initial value and lambda (like `std::accumulate()`).
-- `sum()`: Sum elements of types that support `operator+`.
 - `max()`: Get the maximum element, according to `std::max()`, or `std::nullopt` if the input is
   empty.
 - `min()`: Get the minimum element, according to `std::min()`, or `std::nullopt` if the input is
   empty.
-- `any_of()`: True if any element matches predicate.
-- `all_of()`: True if all elements matches predicate.
 - `none_of()`: True if no element matches predicate.
-- `append()`: Append the result of an input range to an arbitrary container supporting
-  `emplace_back()`, `push_back()`, or `emplace()`.
-- `sort()`: Sort the elements of an input range with `std::sort()`. Does not allocate temporary
-  storage, unless used as input for further algorithms.
-- `uniq()`: Reduce the output by consecutive equality with `std::unique()`. Does not allocate
-  temporary storage, unless used as input for further algorithms.
-- `empty_range()`: A range that is always empty.
-- `chain()`: Return values from multiple ranges, one after another.
-- `cycle()`: Create an infinite range repeating the input elements in a loop.
-- `padded()`: Yield an infinite list of constant values once the input range is exhausted.
-- `zip_longest()`: Produce tuples of values from multiple input ranges, until all of the ranges
-  reach their end.
-- `tee()`: Copy values of a range into a container during iteration.
+- `sum()`: Sum elements of types that support `operator+`.
 
-## TODO
+### Sinks
 
-- Custom comparison functions for `min()`, `max()`, etc.
-- More algorithms (`assign()`, etc.).
-- Subranges: Grouping, partitioning, etc.
+Algorithms that operate on a full range of elements, and produce the output in a standard container.
+When multiple sinks are chained, they will all operate on the same destination container, avoiding
+temporary allocations. However, if a sink is chained with an aggregator or combinator, a temporary
+`std::vector` will be allocated to hold the result.
+
+- `reverse()`: Reverse the order of elements in the input.
+- `uniq()`: Reduce the output by consecutive equality with `std::unique()`.
+- `sort()`: Sort the elements of an input range with `std::sort()`.
+- `to_vector()`: Produce an `std::vector` with all elements of the input.
+- `to_list()`: Produce an `std::list` with all elements of the input.
+- `to_map()`: Produce an `std::map` from elements of the input. Note that the input type must be
+  "tuple-like", where the first component of the tuple becomes the key, and the second component
+  becomes the value.
+- `to_opt()`: Produce a single `std::optional` containing the last element of the input, or
+  `std::nullopt` if the input was empty.
+- `to_set()`: Produce an `std::set` from elements of the input.
+
 
 ## Examples
 
