@@ -501,7 +501,7 @@ struct iterator_range {
                 return advanced;
             }
         } else {
-            size_t i;
+            size_t i = 0;
             for (i = 0; i < n && current_ != end_; ++i) {
                 next();
             }
