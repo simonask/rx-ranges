@@ -145,6 +145,10 @@ TEST_CASE("ranges zip advance_by") {
     auto input = zip(seq(), seq(1));
     advance_by(input, 10);
     CHECK(input.get() == std::tuple{10, 11});
+
+    auto finite = zip(seq(), seq() | take(5));
+    size_t advanced = advance_by(finite, 6);
+    CHECK(advanced == 5);
 }
 
 TEST_CASE("ranges zip reentrant") {
@@ -379,9 +383,15 @@ TEST_CASE("ranges in_groups_of_exactly, dynamic size") {
 
 TEST_CASE("ranges in_groups_of_exactly advance_by") {
     auto input = seq() | in_groups_of_exactly(4);
-    advance_by(input, 3);  // already at the first group
+    size_t advanced = advance_by(input, 3);  // already at the first group
     auto group = input.get();
     CHECK(group.get() == 16);
+    CHECK(advanced == 3);
+
+    auto finite = seq() | take(11) | in_groups_of_exactly(4);
+    advanced = advance_by(finite, 2);
+    CHECK(finite.at_end());
+    CHECK(advanced == 1);
 }
 
 TEST_CASE("ranges in_groups_of") {
@@ -436,6 +446,13 @@ TEST_CASE("ranges in_groups_of advance_by") {
     advance_by(input, 3);  // already at the first group
     auto group = input.get();
     CHECK(group.get() == 16);
+
+    auto finite = seq() | take(11) | in_groups_of(4);
+    size_t advanced = advance_by(finite, 2);
+    CHECK(advanced == 2);
+    advanced = advance_by(finite, 1);
+    CHECK(advanced == 0);
+    CHECK(finite.at_end());
 }
 
 TEST_CASE("ranges group_adjacent_by") {
@@ -549,6 +566,20 @@ TEST_CASE("ranges chain") {
     CHECK(homogenous_actual == homogenous_expected);
 }
 
+TEST_CASE("ranges chain advance_by") {
+    auto input = chain(seq() | take(3), seq(10) | take(3), seq(20) | take(3));
+    auto result1 = input | to_vector();
+    CHECK(result1 == std::vector{{0, 1, 2, 10, 11, 12, 20, 21, 22}});
+    advance_by(input, 4);
+    auto result2 = input | to_vector();
+    CHECK(result2 == std::vector{{11, 12, 20, 21, 22}});
+    advance_by(input, 3);
+    auto result3 = input | to_vector();
+    CHECK(result3 == std::vector{{21, 22}});
+    advance_by(input, 3); // advance beyond end
+    CHECK(input.at_end());
+}
+
 TEST_CASE("ranges cycle") {
     auto nothing = seq() | take(0) | cycle() | take(10) | to_vector();
     CHECK(nothing == std::vector(0, 0));
@@ -558,6 +589,14 @@ TEST_CASE("ranges cycle") {
 
     auto zero_one_two = seq() | take(3) | cycle() | take(10) | to_vector();
     CHECK(zero_one_two == std::vector{{0, 1, 2, 0, 1, 2, 0, 1, 2, 0}});
+}
+
+TEST_CASE("ranges cycle advance_by") {
+    auto input = seq() | take(5) | cycle();
+    advance_by(input, 5); // advancing to the end should wrap around
+    CHECK(input.get() == 0);
+    advance_by(input, 6); // overflow
+    CHECK(input.get() == 1);
 }
 
 TEST_CASE("ranges padded") {
@@ -604,8 +643,9 @@ TEST_CASE("ranges zip_longest advance_by") {
     advance_by(zipped, 2);
     auto expected2 = std::make_tuple(RX_OPTIONAL<int>(), RX_OPTIONAL<std::string>(), RX_OPTIONAL(16));
     CHECK(zipped.get() == expected2);
-    advance_by(zipped, 1);
+    size_t advanced = advance_by(zipped, 2);
     CHECK(zipped.at_end());
+    CHECK(advanced == 1);
 }
 
 TEST_CASE("ranges tee") {

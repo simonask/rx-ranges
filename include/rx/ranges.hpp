@@ -106,7 +106,7 @@ using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
     T&& get() && noexcept; // For non-idempotent ranges, an rvalue reference may be returned for
                            // efficiency. Note that this also requires the const `get()` version to
                            // be marked as `const&` instead of just `const`.
-    void advance_by(size_t) noexcept;
+    size_t advance_by(size_t) noexcept; // Advance by n positions, or until the range is at its end.
     @endcode
 
     Calling `get()` or `next()` while `at_end() == true` is a breach of contract, and is allowed to
@@ -314,13 +314,15 @@ constexpr bool has_advance_by_v = has_advance_by<T>::value;
 ///
 /// This calls R::advance_by() if available. Otherwise, it calls R::next() at most n times.
 template <class R>
-void advance_by(R& range, size_t n) {
+size_t advance_by(R& range, size_t n) {
     if constexpr (has_advance_by_v<R>) {
-        range.advance_by(n);
+        return range.advance_by(n);
     } else {
-        for (size_t i = 0; i < n && !range.at_end(); ++i) {
+        size_t i;
+        for (i = 0; i < n && !range.at_end(); ++i) {
             range.next();
         }
+        return i;
     }
 }
 
@@ -488,17 +490,22 @@ struct iterator_range {
             return 0;
         }
     }
-    constexpr void advance_by(size_t n) noexcept {
+    constexpr size_t advance_by(size_t n) noexcept {
         if constexpr (std::is_same_v<It, EndIt> && is_random_access_iterator_v<It>) {
             if (RX_LIKELY(size_t(end_ - current_) >= n)) {
                 current_ += n;
+                return n;
             } else {
+                size_t advanced = end_ - current_;
                 current_ = end_;
+                return advanced;
             }
         } else {
-            for (size_t i = 0; i < n && current_ != end_; ++i) {
+            size_t i;
+            for (i = 0; i < n && current_ != end_; ++i) {
                 next();
             }
+            return i;
         }
     }
 };
@@ -553,11 +560,14 @@ struct vector_range {
     constexpr size_t size_hint() const noexcept {
         return vector_.size();
     }
-    constexpr void advance_by(size_t n) noexcept {
+    constexpr size_t advance_by(size_t n) noexcept {
         if (size_t(vector_.end() - current_) >= n) {
             current_ += n;
+            return n;
         } else {
+            size_t advanced = vector_.end() - current_;
             current_ = vector_.end();
+            return advanced;
         }
     }
 };
@@ -851,9 +861,9 @@ struct transform {
         constexpr size_t size_hint() const noexcept {
             return input_.size_hint();
         }
-        constexpr void advance_by(size_t n) noexcept {
+        constexpr size_t advance_by(size_t n) noexcept {
             using RX_NAMESPACE::advance_by;
-            advance_by(input_, n);
+            return advance_by(input_, n);
         }
     };
 
@@ -995,21 +1005,25 @@ struct take {
             return n;
         }
 
-        constexpr void advance_by(size_t m) noexcept {
+        constexpr size_t advance_by(size_t m) noexcept {
             using RX_NAMESPACE::advance_by;
             // Addition beyond n and integer overflow both clamp to the end.
             size_t check = i + m;
             bool int_did_overflow = check < i;
             bool bounds_did_overflow = check > n;
 
+            size_t advanced = 0;
             if (!int_did_overflow && !bounds_did_overflow) {
-                advance_by(inner, m);
+                advanced = m;
+                advance_by(inner, advanced);
                 i += m;
             } else if (i != n) {
-                advance_by(inner, n - i);
+                advanced = n - i;
+                advance_by(inner, advanced);
                 i = n;
             }
             RX_ASSERT((!int_did_overflow && !bounds_did_overflow) || at_end());
+            return advanced;
         }
     };
 
@@ -1154,8 +1168,8 @@ struct ZipRange {
         return _size_hint(std::index_sequence_for<Inputs...>{});
     }
 
-    constexpr void advance_by(size_t n) noexcept {
-        _advance_by(std::index_sequence_for<Inputs...>{}, n);
+    constexpr size_t advance_by(size_t n) noexcept {
+        return _advance_by(std::index_sequence_for<Inputs...>{}, n);
     }
 
 private:
@@ -1180,9 +1194,9 @@ private:
     }
 
     template <size_t... Index>
-    constexpr void _advance_by(std::index_sequence<Index...>, size_t n) noexcept {
+    constexpr size_t _advance_by(std::index_sequence<Index...>, size_t n) noexcept {
         using RX_NAMESPACE::advance_by;
-        (advance_by(std::get<Index>(inputs), n), ...);
+        return std::min({advance_by(std::get<Index>(inputs), n)...});
     }
 };
 template <class... Inputs>
@@ -1287,10 +1301,11 @@ struct in_groups_of_exactly {
             return inner.size_hint() / n;
         }
 
-        constexpr void advance_by(size_t m) noexcept {
+        constexpr size_t advance_by(size_t m) noexcept {
             using RX_NAMESPACE::advance_by;
-            advance_by(inner, n * m);
+            size_t advanced = advance_by(inner, n * m);
             next();
+            return advanced / n;
         }
     };
 
@@ -1361,10 +1376,12 @@ struct in_groups_of {
             return (inner.size_hint() + n - 1) / n;
         }
 
-        constexpr void advance_by(size_t m) noexcept {
+        constexpr size_t advance_by(size_t m) noexcept {
             using RX_NAMESPACE::advance_by;
-            advance_by(inner, n * m);
+            size_t advanced = advance_by(inner, n * m);
             next();
+            // Round up
+            return (advanced + n - 1) / n;
         }
     };
 
@@ -2031,8 +2048,10 @@ struct ChainRange {
         return _size_hint(std::make_index_sequence<sizeof...(Rs)>{});
     }
 
-    // Note: advance_by() not specialized because we wouldn't know how far to
-    // skip into the next range.
+    constexpr size_t advance_by(size_t by) noexcept {
+        RX_ASSERT(!at_end());
+        return _advance_by(std::make_index_sequence<sizeof...(Rs)>{}, by);
+    }
 
 private:
     template <std::size_t... Index>
@@ -2050,8 +2069,8 @@ private:
     }
 
     template <std::size_t Index>
-    static constexpr bool _next_at(ChainRange &self) {
-        auto &inner = std::get<Index>(self.inner_tpl);
+    static constexpr bool _next_at(ChainRange& self) noexcept {
+        auto& inner = std::get<Index>(self.inner_tpl);
         inner.next();
         return inner.at_end();
     }
@@ -2064,8 +2083,30 @@ private:
     }
 
     template <std::size_t Index>
-    static constexpr output_type _get_at(const ChainRange &self) {
-        return { std::get<Index>(self.inner_tpl).get() };
+    static constexpr output_type _get_at(const ChainRange& self) {
+        return std::get<Index>(self.inner_tpl).get();
+    }
+
+    template <size_t... Index>
+    constexpr size_t _advance_by(std::index_sequence<Index...>, size_t by) noexcept {
+        using Fn = size_t(*)(ChainRange&, size_t remainder);
+        constexpr Fn fns[] = { &_advance_by_at<Index>... };
+        size_t remainder = by;
+        while (remainder > 0 && !at_end()) {
+            size_t advanced = fns[n](*this, remainder);
+            RX_ASSERT(advanced <= remainder);
+            remainder -= advanced;
+            if (remainder != 0)
+                ++n;
+        }
+        return by - remainder;
+    }
+
+    template <size_t Index>
+    static constexpr size_t _advance_by_at(ChainRange& self, size_t by) noexcept {
+        using RX_NAMESPACE::advance_by;
+        auto& inner = std::get<Index>(self.inner_tpl);
+        return advance_by(inner, by);
     }
 
     template <std::size_t... Index>
@@ -2081,7 +2122,7 @@ private:
     }
 
     template <std::size_t Index>
-    static constexpr bool _at_end_at(const ChainRange &self) {
+    static constexpr bool _at_end_at(const ChainRange& self) {
         return std::get<Index>(self.inner_tpl).at_end();
     }
 };
@@ -2102,7 +2143,8 @@ template <class... InputRanges>
 
 /// Create an infinite range repeating the input elements in a loop.
 ///
-/// If the input is empty, the output is empty, too.
+/// If the input is empty, the output is empty, too. Note that passing an inifite range is
+/// supported, but will never cycle.
 struct cycle {
     template <class R>
     struct Range {
@@ -2113,6 +2155,8 @@ struct cycle {
         const R prototype;
         RX_OPTIONAL<R> input; // rationale: most ranges in this library are not assignable
 
+        static_assert(is_finite_v<R>);
+
         constexpr Range(R prototype_) : prototype(std::move(prototype_)) {
             if (RX_LIKELY(!prototype.at_end())) {
                 input.emplace(prototype);
@@ -2120,7 +2164,7 @@ struct cycle {
         }
 
         [[nodiscard]] constexpr output_type get() const noexcept {
-            RX_ASSERT(!at_end());
+            RX_ASSERT(input && !input->at_end());
             return input->get();
         }
 
@@ -2138,6 +2182,22 @@ struct cycle {
 
         [[nodiscard]] constexpr size_t size_hint() const noexcept {
             return bool(input) ? std::numeric_limits<size_t>::max() : 0;
+        }
+
+        constexpr size_t advance_by(size_t n) noexcept {
+            if (!input)
+                return 0;
+            using RX_NAMESPACE::advance_by;
+            size_t remainder = n;
+            while (remainder > 0) {
+                size_t advanced = advance_by(*input, remainder);
+                RX_ASSERT(advanced <= remainder);
+                remainder -= advanced;
+                if (RX_UNLIKELY(input->at_end())) {
+                    input.emplace(prototype);
+                }
+            }
+            return n;
         }
 
         // Note: advance_by() not specialized because we need to know when to wrap.
@@ -2194,9 +2254,10 @@ struct padded {
             return std::numeric_limits<size_t>::max();
         }
 
-         constexpr void advance_by(size_t n) noexcept {
+         constexpr size_t advance_by(size_t n) noexcept {
              using RX_NAMESPACE::advance_by;
-             advance_by(input, n);
+             size_t advanced = advance_by(input, n);
+             return advanced % n;
          }
     };
 
@@ -2247,8 +2308,8 @@ struct ZipLongestRange {
         return _size_hint(std::index_sequence_for<Inputs...>{});
     }
 
-    constexpr void advance_by(size_t n) noexcept {
-        _advance_by(std::index_sequence_for<Inputs...>{}, n);
+    constexpr size_t advance_by(size_t n) noexcept {
+        return _advance_by(std::index_sequence_for<Inputs...>{}, n);
     }
 
 private:
@@ -2273,9 +2334,9 @@ private:
     }
 
     template <size_t... Index>
-    constexpr void _advance_by(std::index_sequence<Index...>, size_t n) noexcept {
+    constexpr size_t _advance_by(std::index_sequence<Index...>, size_t n) noexcept {
         using RX_NAMESPACE::advance_by;
-        (advance_by(std::get<Index>(inputs), n), ...);
+        return std::max({advance_by(std::get<Index>(inputs), n)...});
     }
 };
 template <class... Inputs>
