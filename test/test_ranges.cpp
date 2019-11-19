@@ -601,6 +601,14 @@ TEST_CASE("ranges flatten") {
     CHECK((flatten3 | sum()) == 3*3*3 * (11+12+13));
 }
 
+TEST_CASE("ranges null_sink") {
+    int a = 0;
+    int b = 0;
+    generate([&]{ return ++a; }) | take(5) | transform([&](auto v) { CHECK(v == ++b); return v; }) | append(null_sink());
+    CHECK(a == 5);
+    CHECK(b == 5);
+}
+
 /*
 TEST_CASE("ranges append to non-container [no compile]") {
     double not_a_container = 0;
