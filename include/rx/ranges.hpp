@@ -2359,6 +2359,120 @@ struct tee {
 template <class Dest>
 tee(Dest&)->tee<remove_cvref_t<Dest>>;
 
+/// Return a range flattening one level of nesting in a range of ranges.
+///
+/// Supply a template parameter bigger than 1 to flatten multiple levels at once.
+template <size_t Depth>
+struct flatten;
+flatten()->flatten<1>;
+
+template <>
+struct flatten <0> {
+    template <class InputRange>
+    [[nodiscard]] constexpr auto operator()(InputRange&& input) const noexcept {
+        return std::forward<InputRange>(input);
+    }
+};
+
+template <>
+struct flatten <1> {
+    template <class R>
+    struct Range {
+        using S = get_range_type_t<get_output_type_of_t<R>>;
+        using output_type = get_output_type_of_t<S>;
+
+        static constexpr bool is_finite = is_finite_v<R> && is_finite_v<S>;
+        static constexpr bool is_idempotent = is_idempotent_v<S>;
+
+        R outer_range;
+        RX_OPTIONAL<S> inner_range;
+
+        template <class Rx>
+        constexpr explicit Range(Rx&& input) : outer_range(std::forward<Rx>(input)) {
+            while (RX_LIKELY(!outer_range.at_end())) {
+                inner_range.emplace(as_input_range(outer_range.get()));
+                if (RX_LIKELY(!inner_range->at_end())) {
+                    return;
+                }
+            }
+            inner_range.reset();
+        }
+
+        [[nodiscard]] constexpr bool at_end() const noexcept {
+            return !bool(inner_range);
+        }
+
+        [[nodiscard]] constexpr output_type get() const noexcept {
+            RX_ASSERT(!at_end());
+            return inner_range->get();
+        }
+
+        constexpr void next() noexcept {
+            RX_ASSERT(!at_end());
+
+            inner_range->next();
+            if (RX_LIKELY(!inner_range->at_end())) {
+                return;
+            }
+
+            for (;;) {
+                outer_range.next();
+                if (RX_UNLIKELY(outer_range.at_end())) {
+                    break;
+                }
+
+                inner_range.emplace(as_input_range(outer_range.get()));
+                if (RX_LIKELY(!inner_range->at_end())) {
+                    return;
+                }
+            }
+            inner_range.reset();
+        }
+
+        [[nodiscard]] constexpr size_t size_hint() const noexcept {
+            if (at_end()) {
+                return 0;
+            }
+
+            auto r = outer_range.size_hint();
+            if (r == 0 || r == std::numeric_limits<size_t>::max()) {
+                return r;
+            }
+
+            auto s = inner_range->size_hint();
+            if (s == std::numeric_limits<size_t>::max()) {
+                return s;
+            } else if (s == 0) {
+                // Only because this inner range is empty, does not mean all inner ranges are.
+                // But either way, we have to assume the other ones have at least one element.
+                return r;
+            }
+
+            auto rs = r * s;
+            if (rs < r || rs < s) {
+                // If the multiplication overflows, return the maximum.
+                return std::numeric_limits<size_t>::max();
+            } else {
+                return rs;
+            }
+        }
+    };
+
+    template <class InputRange>
+    [[nodiscard]] constexpr auto operator()(InputRange&& input) const noexcept {
+        using Inner = get_range_type_t<InputRange>;
+        return Range<Inner>{as_input_range(std::forward<InputRange>(input))};
+    }
+};
+
+template <size_t Depth>
+struct flatten {
+    template <class InputRange>
+    [[nodiscard]] constexpr auto operator()(InputRange&& input) const noexcept {
+        return std::forward<InputRange>(input) | flatten<1>() | flatten<Depth - 1>();
+    }
+};
+
 } // namespace RX_NAMESPACE
 
 #endif // RX_RANGES_HPP_INCLUDED

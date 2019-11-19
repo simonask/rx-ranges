@@ -103,6 +103,7 @@ Algorithms that produce ranges from the output of other ranges.
   reach their end.
 - `zip()`: Produce tuples of values from multiple input ranges, until one of the ranges reaches its
   end.
+- `flatten()`: Return a range flattening one level of nesting in a range of ranges.
 
 ### Aggregators
 
