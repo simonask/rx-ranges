@@ -28,14 +28,46 @@ if (RX_TEST)
     # Release falls back to RelWithDebInfo, then MinSizeRel
     set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release RelWithDebInfo MinSizeRel NoConfig "")
 
-    if (APPLE)
-        add_subdirectory(doctest)
-    else()
-        find_package(doctest REQUIRED)
+    # Note: Cloning ad-hoc, because we don't want to add submodules (interfering with other
+    # projects using us as submodule and `--recursive`), and `ExternalProject` does not work well at
+    # all for importing targets from other projects.
+    if (NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/doctest")
+        message(STATUS "Cloning onqtam/doctest...")
+        execute_process(
+            COMMAND git clone https://github.com/onqtam/doctest.git
+            WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        )
+    endif()
+    if (NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/benchmark")
+        message(STATUS "Cloning google/benchmark...")
+        execute_process(
+            COMMAND git clone https://github.com/google/benchmark.git
+            WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        )
     endif()
 
+    set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_ENABLE_EXCEPTIONS ON CACHE BOOL "" FORCE)
+    set(BENCHMARK_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+    mark_as_advanced(BENCHMARK_ENABLE_TESTING)
+    mark_as_advanced(BENCHMARK_ENABLE_GTEST_TESTS)
+    mark_as_advanced(BENCHMARK_ENABLE_EXCEPTIONS)
+    mark_as_advanced(BENCHMARK_ENABLE_INSTALL)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+
+    set(DOCTEST_WITH_TESTS OFF CACHE BOOL "" FORCE)
+    set(DOCTEST_WITH_MAIN_IN_STATIC_LIB OFF CACHE BOOL "" FORCE)
+    set(DOCTEST_NO_INSTALL OFF CACHE BOOL "" FORCE)
+    mark_as_advanced(DOCTEST_WITH_TESTS)
+    mark_as_advanced(DOCTEST_WITH_MAIN_IN_STATIC_LIB)
+    mark_as_advanced(DOCTEST_NO_INSTALL)
+
+    add_subdirectory("${CMAKE_CURRENT_BINARY_DIR}/doctest")
+    add_subdirectory("${CMAKE_CURRENT_BINARY_DIR}/benchmark")
+
     add_executable(rx-ranges-test test/test_ranges.cpp)
-    target_link_libraries(rx-ranges-test PRIVATE rx::ranges doctest::doctest)
+    target_link_libraries(rx-ranges-test PRIVATE rx::ranges doctest)
     target_compile_definitions(rx-ranges-test PRIVATE "DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN")
     if (WIN32)
         target_compile_definitions(rx-ranges-test PRIVATE "_CRT_SECURE_NO_WARNINGS")
@@ -55,19 +87,10 @@ if (RX_TEST)
     else()
         message(WARNING "Boost not found, not building calendar example")
     endif()
-    find_package(benchmark QUIET)
-    if (benchmark_FOUND)
-        if (UNIX AND NOT APPLE)
-            set(benchmark_LIBS "benchmark")
-        else()
-            set(benchmark_LIBS "benchmark::benchmark")
-        endif()
-        add_executable(rx-benchmark test/benchmark.cpp)
-        if (WIN32)
-            target_compile_definitions(rx-benchmark PRIVATE "_CRT_SECURE_NO_WARNINGS")
-        endif()
-        target_link_libraries(rx-benchmark PRIVATE rx::ranges ${benchmark_LIBS})
-    else()
-        message(WARNING "Google benchmark not found, not building benchmarks")
+
+    add_executable(rx-benchmark test/benchmark.cpp)
+    if (WIN32)
+        target_compile_definitions(rx-benchmark PRIVATE "_CRT_SECURE_NO_WARNINGS")
     endif()
+    target_link_libraries(rx-benchmark PRIVATE rx::ranges benchmark)
 endif()
