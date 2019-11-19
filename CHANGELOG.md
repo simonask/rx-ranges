@@ -5,14 +5,18 @@ for range libraries is supported (see [./test/calendar.cpp](calendar.cpp) for mo
 
 ### Features
 
-- Added `in_groups_of(size_t)`, `in_groups_of_exactly<size_t>()`, `in_groups_of_exactly(size_t)`,
-  which produce consecutive subranges of a particular size. `in_groups_of(size_t)` includes all
-  elements, potentially producing a smaller group at the end of the input.
-- Added `group_adjacent_by(F)`, which produces groups of adjacent elements for which a given
-  function returns the same value.
-- `min()` and `max()` can now operate with a custom comparison function.
-- Added `for_each` combinator, for situations where it produces more legible code.
-
+- Algorithms added:
+  - `chain()`
+  - `cycle()`
+  - `flatten()`
+  - `for_each()`
+  - `group_adjacent_by()`
+  - `in_groups_of_exactly()`
+  - `in_groups_of()`
+  - `null_sink()`
+  - `padded()`
+  - `tee()`
+  - `zip_longest()`
 
 ### Bugfixes
 
@@ -23,7 +27,7 @@ for range libraries is supported (see [./test/calendar.cpp](calendar.cpp) for mo
 - Fix `first()` after `sort()` (#8).
 - `sort()` can now be constructed with comparison predicates taking more than one constructor
   argument.
-- `sort()`/`min()`/`max()` now support non-default-constructible and non-copyable predicates.
+- `sort()`/`min()`/`max()` support non-default-constructible and non-copyable predicates.
 
 ### Optimizations
 
@@ -36,9 +40,12 @@ for range libraries is supported (see [./test/calendar.cpp](calendar.cpp) for mo
 
 ### Other
 
+- Grouping combinators now produce subranges instead of `std::array`s or `std::vector`s, eliminating
+  the need to allocate temporary internal storage.
 - Added a benchmark suite using Google Benchmark.
 - Cleanup of internal naming conventions.
 - `T::is_finite` is no longer required for input ranges (defaults to `false` if missing).
+- `min()` and `max()` can now operate with a custom comparison function.
 
 ### Contributors
 
