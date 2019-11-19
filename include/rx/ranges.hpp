@@ -106,6 +106,7 @@ using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
     T&& get() && noexcept; // For non-idempotent ranges, an rvalue reference may be returned for
                            // efficiency. Note that this also requires the const `get()` version to
                            // be marked as `const&` instead of just `const`.
+    size_t advance_by(size_t) noexcept; // Advance by n positions, or until the range is at its end.
     @endcode
 
     Calling `get()` or `next()` while `at_end() == true` is a breach of contract, and is allowed to
@@ -236,7 +237,7 @@ constexpr bool is_idempotent_v = is_idempotent<remove_cvref_t<T>>::value;
 template <class T, class Enable = void>
 struct is_random_access_iterator : std::false_type {};
 template <class T>
-struct is_random_access_iterator<T, std::void_t<decltype(std::declval<T&>() += 1)>>
+struct is_random_access_iterator<T, std::void_t<decltype(std::declval<T&>() += 0)>>
     : std::true_type {};
 template <class T>
 constexpr bool is_random_access_iterator_v = is_random_access_iterator<T>::value;
@@ -300,6 +301,29 @@ template <class R, class = std::enable_if_t<is_input_or_sink_v<R>>>
 [[nodiscard]] constexpr auto end(const R&) noexcept {
     // Note: The first argument may be moved-from, but that's OK, we just need its type.
     return input_range_iterator_end{};
+}
+
+template <class T, class Enable = void>
+struct has_advance_by : std::false_type {};
+template <class T>
+struct has_advance_by<T, std::void_t<decltype(std::declval<T&>().advance_by(size_t(0)))>> : std::true_type {};
+template <class T>
+constexpr bool has_advance_by_v = has_advance_by<T>::value;
+
+/// Advance a range by n steps, or until it reaches its end.
+///
+/// This calls R::advance_by() if available. Otherwise, it calls R::next() at most n times.
+template <class R>
+size_t advance_by(R& range, size_t n) {
+    if constexpr (has_advance_by_v<R>) {
+        return range.advance_by(n);
+    } else {
+        size_t i;
+        for (i = 0; i < n && !range.at_end(); ++i) {
+            range.next();
+        }
+        return i;
+    }
 }
 
 namespace detail {
@@ -466,6 +490,24 @@ struct iterator_range {
             return 0;
         }
     }
+    constexpr size_t advance_by(size_t n) noexcept {
+        if constexpr (std::is_same_v<It, EndIt> && is_random_access_iterator_v<It>) {
+            if (RX_LIKELY(size_t(end_ - current_) >= n)) {
+                current_ += n;
+                return n;
+            } else {
+                size_t advanced = end_ - current_;
+                current_ = end_;
+                return advanced;
+            }
+        } else {
+            size_t i = 0;
+            for (i = 0; i < n && current_ != end_; ++i) {
+                next();
+            }
+            return i;
+        }
+    }
 };
 template <class C>
 iterator_range(const C& c)->iterator_range<decltype(begin(c)), decltype(end(c))>;
@@ -517,6 +559,16 @@ struct vector_range {
     }
     constexpr size_t size_hint() const noexcept {
         return vector_.size();
+    }
+    constexpr size_t advance_by(size_t n) noexcept {
+        if (size_t(vector_.end() - current_) >= n) {
+            current_ += n;
+            return n;
+        } else {
+            size_t advanced = vector_.end() - current_;
+            current_ = vector_.end();
+            return advanced;
+        }
     }
 };
 
@@ -599,7 +651,7 @@ struct idempotent_range {
     static constexpr bool is_finite = is_finite_v<R>;
     static constexpr bool is_idempotent = true;
     using element_type = remove_cvref_t<typename R::output_type>;
-    using storage_type = RX_OPTIONAL<element_type>; 
+    using storage_type = RX_OPTIONAL<element_type>;
     using output_type = const element_type&;
 
     R inner_;
@@ -809,6 +861,10 @@ struct transform {
         constexpr size_t size_hint() const noexcept {
             return input_.size_hint();
         }
+        constexpr size_t advance_by(size_t n) noexcept {
+            using RX_NAMESPACE::advance_by;
+            return advance_by(input_, n);
+        }
     };
 
     // Since F may be either cheap or expensive to copy, provide overloads for both const-refs and
@@ -942,11 +998,32 @@ struct take {
         }
 
         [[nodiscard]] constexpr bool at_end() const noexcept {
-            return i == n || inner.at_end();
+            return i >= n || inner.at_end();
         }
 
         constexpr size_t size_hint() const noexcept {
             return n;
+        }
+
+        constexpr size_t advance_by(size_t m) noexcept {
+            using RX_NAMESPACE::advance_by;
+            // Addition beyond n and integer overflow both clamp to the end.
+            size_t check = i + m;
+            bool int_did_overflow = check < i;
+            bool bounds_did_overflow = check > n;
+
+            size_t advanced = 0;
+            if (!int_did_overflow && !bounds_did_overflow) {
+                advanced = m;
+                advance_by(inner, advanced);
+                i += m;
+            } else if (i != n) {
+                advanced = n - i;
+                advance_by(inner, advanced);
+                i = n;
+            }
+            RX_ASSERT((!int_did_overflow && !bounds_did_overflow) || at_end());
+            return advanced;
         }
     };
 
@@ -974,47 +1051,14 @@ using first_n = take;
     @brief Create a range that skips the first N elements of its input.
 */
 struct skip_n {
-    size_t n;
+    const size_t n;
     constexpr explicit skip_n(size_t n) noexcept : n(n) {}
 
     template <class InputRange>
-    struct Range {
-        InputRange input_;
-        size_t i_ = 0;
-        const size_t n_;
-        using output_type = typename InputRange::output_type;
-        static constexpr bool is_finite = is_finite_v<InputRange>;
-        static constexpr bool is_idempotent = is_idempotent_v<InputRange>;
-
-        constexpr Range(InputRange input, size_t n) noexcept : input_(std::move(input)), n_(n) {
-            while (RX_LIKELY(!input_.at_end() && i_ < n_)) {
-                input_.next();
-                ++i_;
-            }
-        }
-
-        [[nodiscard]] constexpr output_type get() const noexcept {
-            RX_ASSERT(!at_end());
-            return input_.get();
-        }
-
-        constexpr void next() noexcept {
-            RX_ASSERT(!at_end());
-            input_.next();
-        }
-
-        constexpr bool at_end() const noexcept {
-            return input_.at_end();
-        }
-
-        constexpr size_t size_hint() const noexcept {
-            return input_.size_hint();
-        }
-    };
-    template <class InputRange>
     [[nodiscard]] constexpr auto operator()(InputRange&& input) const {
-        using Inner = get_range_type_t<InputRange>;
-        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), n};
+        auto range = as_input_range(std::forward<InputRange>(input));
+        advance_by(range, n);
+        return range;
     }
 };
 
@@ -1037,7 +1081,7 @@ struct until {
         static_assert(is_idempotent_v<R>);
         using output_type = remove_cvref_t<typename R::output_type>;
         static constexpr bool is_finite = true;
-        static constexpr bool is_idempotent = true;
+        static constexpr bool is_idempotent = false; // get() is called twice per iteration
 
         R input;
         P pred;
@@ -1124,6 +1168,10 @@ struct ZipRange {
         return _size_hint(std::index_sequence_for<Inputs...>{});
     }
 
+    constexpr size_t advance_by(size_t n) noexcept {
+        return _advance_by(std::index_sequence_for<Inputs...>{}, n);
+    }
+
 private:
     template <size_t... Index>
     [[nodiscard]] constexpr output_type _get(std::index_sequence<Index...>) const noexcept {
@@ -1143,6 +1191,12 @@ private:
     template <size_t... Index>
     constexpr size_t _size_hint(std::index_sequence<Index...>) const noexcept {
         return std::min({std::get<Index>(inputs).size_hint()...});
+    }
+
+    template <size_t... Index>
+    constexpr size_t _advance_by(std::index_sequence<Index...>, size_t n) noexcept {
+        using RX_NAMESPACE::advance_by;
+        return std::min({advance_by(std::get<Index>(inputs), n)...});
     }
 };
 template <class... Inputs>
@@ -1176,146 +1230,82 @@ template <class... Inputs>
         std::forward_as_tuple(seq<size_t>(), as_input_range(std::forward<Inputs>(inputs))...));
 }
 
-template <size_t...>
-struct in_groups_of_exactly;
-
 /*!
-    @brief Produce sequential groups of exactly N elements, where N is known at compile-time.
+    @brief Produce sequential groups of exactly N elements.
 
-    The output type is `std::array<T, N>` rvalue reference, where T is the output type of the
-    inner range (without cvref-qualifiers).
+    The output type is a range of exactly N element.
 
-    If the input produces a number of inputs that is not divisible by N, those
-    elements will be skipped.
-*/
-template <size_t N>
-struct in_groups_of_exactly<N> {
-    static_assert(N != 0);
-
-    template <class R>
-    struct Range {
-        R inner;
-        using element_type = remove_cvref_t<typename R::output_type>;
-        using output_type = std::array<element_type, N>&&;
-        static constexpr bool is_finite = is_finite_v<R>;
-        static constexpr bool is_idempotent = true; // we have internal storage
-
-        constexpr explicit Range(R inner) : inner(std::move(inner)) {
-            fill_group();
-        }
-
-        mutable std::array<element_type, N> storage;
-
-        [[nodiscard]] constexpr output_type get() const noexcept {
-            RX_ASSERT(!at_end());
-            return std::move(storage);
-        }
-
-        [[nodiscard]] constexpr bool at_end() const noexcept {
-            return inner.at_end();
-        }
-
-        constexpr void next() noexcept {
-            RX_ASSERT(!at_end());
-            inner.next();
-            fill_group();
-        }
-
-        [[nodiscard]] constexpr size_t size_hint() const noexcept {
-            return inner.size_hint() / N;
-        }
-
-        constexpr void fill_group() {
-            // Fill from the current position, but don't increment into the next group.
-            size_t i = 0;
-            while (true) {
-                if (RX_LIKELY(!inner.at_end())) {
-                    storage[i++] = inner.get();
-                    if (RX_LIKELY(i != N)) {
-                        inner.next();
-                    } else {
-                        return;
-                    }
-                } else {
-                    return;
-                }
-            }
-        }
-    };
-
-    template <class R>
-    [[nodiscard]] constexpr auto operator()(R&& input) const {
-        using Inner = get_range_type_t<R>;
-        return Range<Inner>{as_input_range(std::forward<R>(input))};
-    }
-};
-
-/*!
-    @brief Produce sequential groups of exactly N elements, where N is only known at runtime.
-
-    The output type is `std::vector<N>` const reference, where T is the output type of the inner
-    range (without cvref-qualifiers), and the size of the result is always N.
-
-    If the input produces a number of inputs that is not divisible by N, those elements will be
+    If the input produces a number of inputs that is not divisible by N, elements at the end will be
     skipped.
 */
-template <>
-struct in_groups_of_exactly<> {
-    size_t n;
+struct in_groups_of_exactly {
+    const size_t n;
 
-    constexpr explicit in_groups_of_exactly(size_t n) noexcept : n(n) {}
+    constexpr explicit in_groups_of_exactly(size_t n) : n(n) {
+        if (n == 0) {
+            throw std::runtime_error("in_groups_of_exactly(0) is not allowed");
+        }
+    }
 
     template <class R>
     struct Range {
         using element_type = remove_cvref_t<typename R::output_type>;
-        using output_type = const std::vector<element_type>&;
+        using output_type = remove_cvref_t<decltype(std::declval<R>() | take(1))>;
         static constexpr bool is_finite = is_finite_v<R>;
-        static constexpr bool is_idempotent = true; // we have internal storage
+        static constexpr bool is_idempotent = true; // ... but we output potentially non-idempotent
+                                                    // ranges.
 
         R inner;
         const size_t n;
-        std::vector<element_type> storage;
+        RX_OPTIONAL<output_type> storage;
 
         constexpr explicit Range(R inner, size_t n) : inner(std::move(inner)), n(n) {
-            storage.reserve(n);
-            fill_group();
+            next();
         }
 
 
-        [[nodiscard]] constexpr output_type get() const noexcept {
+        [[nodiscard]] constexpr output_type get() const& noexcept {
             RX_ASSERT(!at_end());
-            return storage;
+            return *storage;
+        }
+
+        [[nodiscard]] constexpr output_type get() && noexcept {
+            RX_ASSERT(!at_end());
+            return std::move(*storage);
         }
 
         [[nodiscard]] constexpr bool at_end() const noexcept {
-            return inner.at_end();
+            return bool(!storage);
         }
 
         constexpr void next() noexcept {
-            RX_ASSERT(!at_end());
-            inner.next();
-            fill_group();
+            storage.reset();
+            if (RX_LIKELY(!inner.at_end())) {
+                auto copy = as_input_range(inner);
+                using RX_NAMESPACE::advance_by;
+                if (RX_LIKELY(n > 1)) {
+                    advance_by(inner, n - 1);
+                    if (inner.at_end()) {
+                        // end was reached before we could produce a whole group.
+                        storage.reset();
+                        return;
+                    }
+                }
+                // n cannot be zero
+                inner.next();
+                storage.emplace(std::move(copy) | take(n));
+            }
         }
 
         constexpr size_t size_hint() const noexcept {
             return inner.size_hint() / n;
         }
 
-        constexpr void fill_group() {
-            storage.clear(); // recycle the vector
-            // Fill from the current position, but don't increment into the next group.
-            while (true) {
-                if (RX_LIKELY(!inner.at_end())) {
-                    storage.emplace_back(inner.get());
-                    if (RX_LIKELY(storage.size() != n)) {
-                        inner.next();
-                    } else {
-                        return;
-                    }
-                } else {
-                    return;
-                }
-            }
+        constexpr size_t advance_by(size_t m) noexcept {
+            using RX_NAMESPACE::advance_by;
+            size_t advanced = advance_by(inner, n * m);
+            next();
+            return advanced / n;
         }
     };
 
@@ -1326,21 +1316,16 @@ struct in_groups_of_exactly<> {
     }
 };
 
-in_groups_of_exactly(size_t)->in_groups_of_exactly<>;
-
 /*!
     @brief Produce sequential groups of N or fewer elements.
 
-    The output type is `std::vector<N>` const reference, where T is the output type of the inner
-    range (without cvref-qualifiers), and the size of the result is never greater than N.
-
-    If the input produces a number of inputs that is not divisible by N, the last group produces
-    will have a size < N.
+    The output type is a range producing at most N elements. If the input produces a number of
+    inputs that is not divisible by N, the last group produces will have a size < N.
 */
 struct in_groups_of {
     size_t n;
 
-    explicit in_groups_of(size_t n) : n(n) {
+    constexpr explicit in_groups_of(size_t n) : n(n) {
         if (n == 0) {
             throw std::runtime_error("in_groups_of(0) is not allowed");
         }
@@ -1349,39 +1334,40 @@ struct in_groups_of {
     template <class R>
     struct Range {
         using element_type = remove_cvref_t<typename R::output_type>;
-        using output_type = const std::vector<element_type>&;
+        using output_type = decltype(std::declval<R>() | take(1));
         static constexpr bool is_finite = is_finite_v<R>;
-        static constexpr bool is_idempotent = true; // we have internal storage
+        static constexpr bool is_idempotent = true; // ... but we output potentially non-idempotent
+                                                    // ranges.
 
         R inner;
-        std::vector<element_type> storage;
+        RX_OPTIONAL<output_type> storage;
         size_t n;
-        bool done = false;
 
         Range(R inner, size_t n) : inner(std::move(inner)), n(n) {
-            if (RX_LIKELY(!this->inner.at_end())) {
-                storage.reserve(n);
-                fill_group();
-            } else {
-                done = true;
-            }
+            next();
         }
 
-        [[nodiscard]] output_type get() const noexcept {
+        [[nodiscard]] output_type get() const& noexcept {
             RX_ASSERT(!at_end());
-            return storage;
+            return *storage;
+        }
+
+        [[nodiscard]] output_type get() && noexcept {
+            RX_ASSERT(!at_end());
+            return std::move(*storage);
         }
 
         [[nodiscard]] bool at_end() const noexcept {
-            return done;
+            return bool(!storage);
         }
 
-        void next() noexcept {
-            RX_ASSERT(!at_end());
-            if (inner.at_end()) {
-                done = true;
-            } else {
-                fill_group();
+        constexpr void next() noexcept {
+            storage.reset();
+            if (RX_LIKELY(!inner.at_end())) {
+                auto copy = as_input_range(inner);
+                using RX_NAMESPACE::advance_by;
+                advance_by(inner, n);
+                storage.emplace(std::move(copy) | take(n));
             }
         }
 
@@ -1390,25 +1376,12 @@ struct in_groups_of {
             return (inner.size_hint() + n - 1) / n;
         }
 
-        void fill_group() {
-            // recycle the vector
-            storage.clear();
-            storage.emplace_back(inner.get());
-            inner.next();
-            while (true) {
-                if (RX_LIKELY(!inner.at_end())) {
-                    if (RX_LIKELY(storage.size() != n)) {
-                        storage.emplace_back(inner.get());
-                        inner.next();
-                    } else {
-                        return;
-                    }
-                } else {
-                    return;
-                }
-                if (inner.at_end())
-                    return;
-            }
+        constexpr size_t advance_by(size_t m) noexcept {
+            using RX_NAMESPACE::advance_by;
+            size_t advanced = advance_by(inner, n * m);
+            next();
+            // Round up
+            return (advanced + n - 1) / n;
         }
     };
 
@@ -2075,6 +2048,11 @@ struct ChainRange {
         return _size_hint(std::make_index_sequence<sizeof...(Rs)>{});
     }
 
+    constexpr size_t advance_by(size_t by) noexcept {
+        RX_ASSERT(!at_end());
+        return _advance_by(std::make_index_sequence<sizeof...(Rs)>{}, by);
+    }
+
 private:
     template <std::size_t... Index>
     constexpr size_t _size_hint(std::index_sequence<Index...>) const {
@@ -2091,8 +2069,8 @@ private:
     }
 
     template <std::size_t Index>
-    static constexpr bool _next_at(ChainRange &self) {
-        auto &inner = std::get<Index>(self.inner_tpl);
+    static constexpr bool _next_at(ChainRange& self) noexcept {
+        auto& inner = std::get<Index>(self.inner_tpl);
         inner.next();
         return inner.at_end();
     }
@@ -2105,8 +2083,30 @@ private:
     }
 
     template <std::size_t Index>
-    static constexpr output_type _get_at(const ChainRange &self) {
-        return { std::get<Index>(self.inner_tpl).get() };
+    static constexpr output_type _get_at(const ChainRange& self) {
+        return std::get<Index>(self.inner_tpl).get();
+    }
+
+    template <size_t... Index>
+    constexpr size_t _advance_by(std::index_sequence<Index...>, size_t by) noexcept {
+        using Fn = size_t(*)(ChainRange&, size_t remainder);
+        constexpr Fn fns[] = { &_advance_by_at<Index>... };
+        size_t remainder = by;
+        while (remainder > 0 && !at_end()) {
+            size_t advanced = fns[n](*this, remainder);
+            RX_ASSERT(advanced <= remainder);
+            remainder -= advanced;
+            if (remainder != 0)
+                ++n;
+        }
+        return by - remainder;
+    }
+
+    template <size_t Index>
+    static constexpr size_t _advance_by_at(ChainRange& self, size_t by) noexcept {
+        using RX_NAMESPACE::advance_by;
+        auto& inner = std::get<Index>(self.inner_tpl);
+        return advance_by(inner, by);
     }
 
     template <std::size_t... Index>
@@ -2122,7 +2122,7 @@ private:
     }
 
     template <std::size_t Index>
-    static constexpr bool _at_end_at(const ChainRange &self) {
+    static constexpr bool _at_end_at(const ChainRange& self) {
         return std::get<Index>(self.inner_tpl).at_end();
     }
 };
@@ -2143,7 +2143,8 @@ template <class... InputRanges>
 
 /// Create an infinite range repeating the input elements in a loop.
 ///
-/// If the input is empty, the output is empty, too.
+/// If the input is empty, the output is empty, too. Note that passing an inifite range is
+/// supported, but will never cycle.
 struct cycle {
     template <class R>
     struct Range {
@@ -2154,6 +2155,8 @@ struct cycle {
         const R prototype;
         RX_OPTIONAL<R> input; // rationale: most ranges in this library are not assignable
 
+        static_assert(is_finite_v<R>);
+
         constexpr Range(R prototype_) : prototype(std::move(prototype_)) {
             if (RX_LIKELY(!prototype.at_end())) {
                 input.emplace(prototype);
@@ -2161,7 +2164,7 @@ struct cycle {
         }
 
         [[nodiscard]] constexpr output_type get() const noexcept {
-            RX_ASSERT(!at_end());
+            RX_ASSERT(input && !input->at_end());
             return input->get();
         }
 
@@ -2180,6 +2183,24 @@ struct cycle {
         [[nodiscard]] constexpr size_t size_hint() const noexcept {
             return bool(input) ? std::numeric_limits<size_t>::max() : 0;
         }
+
+        constexpr size_t advance_by(size_t n) noexcept {
+            if (!input)
+                return 0;
+            using RX_NAMESPACE::advance_by;
+            size_t remainder = n;
+            while (remainder > 0) {
+                size_t advanced = advance_by(*input, remainder);
+                RX_ASSERT(advanced <= remainder);
+                remainder -= advanced;
+                if (RX_UNLIKELY(input->at_end())) {
+                    input.emplace(prototype);
+                }
+            }
+            return n;
+        }
+
+        // Note: advance_by() not specialized because we need to know when to wrap.
     };
 
     template <class R>
@@ -2232,6 +2253,12 @@ struct padded {
         [[nodiscard]] constexpr size_t size_hint() const noexcept {
             return std::numeric_limits<size_t>::max();
         }
+
+         constexpr size_t advance_by(size_t n) noexcept {
+             using RX_NAMESPACE::advance_by;
+             size_t advanced = advance_by(input, n);
+             return advanced % n;
+         }
     };
 
     template <class InputRange>
@@ -2250,7 +2277,7 @@ template <class V>
 padded(V&)->padded<remove_cvref_t<V>>;
 template <class V>
 padded(V&&)->padded<remove_cvref_t<V>>;
-  
+
 template <class... Inputs>
 struct ZipLongestRange {
     static_assert(sizeof...(Inputs) > 0);
@@ -2281,6 +2308,10 @@ struct ZipLongestRange {
         return _size_hint(std::index_sequence_for<Inputs...>{});
     }
 
+    constexpr size_t advance_by(size_t n) noexcept {
+        return _advance_by(std::index_sequence_for<Inputs...>{}, n);
+    }
+
 private:
     template <size_t... Index>
     [[nodiscard]] constexpr output_type _get(std::index_sequence<Index...>) const noexcept {
@@ -2300,6 +2331,12 @@ private:
     template <size_t... Index>
     constexpr size_t _size_hint(std::index_sequence<Index...>) const noexcept {
         return std::max({std::get<Index>(inputs).size_hint()...});
+    }
+
+    template <size_t... Index>
+    constexpr size_t _advance_by(std::index_sequence<Index...>, size_t n) noexcept {
+        using RX_NAMESPACE::advance_by;
+        return std::max({advance_by(std::get<Index>(inputs), n)...});
     }
 };
 template <class... Inputs>
@@ -2348,6 +2385,9 @@ struct tee {
         constexpr size_t size_hint() const noexcept {
             return input.size_hint();
         }
+
+        // Note: advance_by() not specialized because tee() needs to see every
+        // element.
     };
 
     template <class InputRange>

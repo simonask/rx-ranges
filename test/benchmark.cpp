@@ -119,4 +119,66 @@ static void bench_filter_sum_plain(benchmark::State& state) {
 }
 BENCHMARK(bench_filter_sum_plain);
 
+static void bench_in_groups_of_exactly_rx(benchmark::State& state) {
+    std::vector<int> input = seq() | take(1'000'000) | to_vector();
+    for (auto _ : state) {
+        // Sum the last element in each group
+        auto f = [](auto begin, auto end) {
+            return iterator_range(begin, end) | in_groups_of_exactly(16) | transform([](auto&& group) {
+                advance_by(group, 15);
+                return group.get();
+            }) | sum();
+        };
+        benchmark::DoNotOptimize(f(begin(input), end(input)));
+    }
+}
+BENCHMARK(bench_in_groups_of_exactly_rx);
+
+static void bench_in_groups_of_rx(benchmark::State& state) {
+    std::vector<int> input = seq() | take(1'000'000) | to_vector();
+    for (auto _ : state) {
+        // sum highest element of each group
+        auto f = [](auto begin, auto end) constexpr {
+            return iterator_range(begin, end) | in_groups_of(16) | transform([](auto&& group) {
+                auto copy = group;
+                advance_by(copy, 15);
+                if (RX_LIKELY(!copy.at_end())) {
+                    return copy.get();
+                } else {
+                    auto tmp = group.get();
+                    while (!group.at_end()) {
+                        group.next();
+                        tmp = group.get();
+                    }
+                    return tmp;
+                }
+                return group.get();
+            }) | sum();
+        };
+        benchmark::DoNotOptimize(f(begin(input), end(input)));
+    }
+}
+BENCHMARK(bench_in_groups_of_rx);
+
+static void bench_in_groups_of_std(benchmark::State& state) {
+    std::vector<int> input = seq() | take(1'000'000) | to_vector();
+    for (auto _ : state) {
+        auto f = [](auto begin, auto end) constexpr {
+            int sum = 0;
+            for (auto it = begin; it != end;) {
+                if (end - it >= 16) {
+                    sum += *(it + 15);
+                    it += 16;
+                } else {
+                    sum += *(end - 1);
+                    break;
+                }
+            }
+            return sum;
+        };
+        benchmark::DoNotOptimize(f(begin(input), end(input)));
+    }
+}
+BENCHMARK(bench_in_groups_of_std);
+
 BENCHMARK_MAIN();
