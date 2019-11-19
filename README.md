@@ -88,6 +88,7 @@ Algorithms that produce ranges from the output of other ranges.
 - `chain()`: Return values from multiple ranges, one after another.
 - `filter()`: Produce only elements from an input range where predicate returns true.
 - `first_n()`: Alias for `take()`.
+- `flatten()`: Return a range flattening one level of nesting in a range of ranges.
 - `group_adjacent_by()`: Produce subranges for which a user-provided function returns the same value
   for a sequence of elements.
 - `in_groups_of()`: Produce subranges containing at least one and at most `n` elements.
@@ -103,7 +104,6 @@ Algorithms that produce ranges from the output of other ranges.
   reach their end.
 - `zip()`: Produce tuples of values from multiple input ranges, until one of the ranges reaches its
   end.
-- `flatten()`: Return a range flattening one level of nesting in a range of ranges.
 
 ### Aggregators
 
@@ -131,6 +131,7 @@ When multiple sinks are chained, they will all operate on the same destination c
 temporary allocations. However, if a sink is chained with an aggregator or combinator, a temporary
 `std::vector` will be allocated to hold the result.
 
+- `null_sink()`: A sink that simply discards all elements of a range.
 - `reverse()`: Reverse the order of elements in the input.
 - `uniq()`: Reduce the output by consecutive equality with `std::unique()`.
 - `sort()`: Sort the elements of an input range with `std::sort()`.
@@ -142,7 +143,6 @@ temporary allocations. However, if a sink is chained with an aggregator or combi
 - `to_opt()`: Produce a single `std::optional` containing the last element of the input, or
   `std::nullopt` if the input was empty.
 - `to_set()`: Produce an `std::set` from elements of the input.
-- `null_sink()`: A sink that simply discards all elements of a range.
 
 ## Examples
 
