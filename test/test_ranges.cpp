@@ -770,6 +770,25 @@ struct normalize {
 std::vector<double> normalize_vector(std::vector<double> input) {
     return input | normalize() | to_vector();
 }
+
+struct average {
+    template <class Input>
+    constexpr auto operator()(Input&& input) const {
+        using element_type = rx::get_output_type_of_t<Input>;
+        auto [count, summed] = rx::zip(rx::seq(1, 0), input)
+            | rx::foldl(std::tuple(size_t(0), element_type{0}),
+                [](auto&& accum, auto&& element) {
+                    return std::tuple(std::get<0>(accum) + std::get<0>(element),
+                                      std::get<1>(accum) + std::get<1>(element));
+                });
+        return summed / element_type(count);
+    }
+};
+
+// Using our new aggregator in practice:
+double compute_average(std::vector<double> values) {
+    return values | average();
+}
 } // anonymous namespace
 
 TEST_CASE("ranges doc examples test") {
@@ -779,6 +798,9 @@ TEST_CASE("ranges doc examples test") {
     // length is 9 — this happens to produce exact floating point results.
     auto normalized = normalize_vector(std::vector{{4.0, 8.0, 1.0}});
     CHECK(normalized == std::vector{{4.0 / 9, 8.0 / 9, 1.0 / 9}});
+
+    auto avg = compute_average(std::vector{{1.0, 2.0, 3.0, 4.0, 5.0}});
+    CHECK(avg == 3.0);
 }
 
 /*

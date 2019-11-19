@@ -179,7 +179,7 @@ auto sorted = strings | sort() | to_vector();
 See [the tests](test/test_ranges.cpp) for more.
 
 
-## Custom combinators
+### Custom combinators
 
 If the algorithms included in rx::ranges do not cover your needs, defining your
 own is simple. Here is an example of an adapter that converts its input to strings:
@@ -274,7 +274,7 @@ std::vector<std::string> convert_ints_to_sorted_strings(std::vector<int> input) 
 ~~~
 
 
-## Custom sinks
+### Custom sinks
 
 Some algorithms want to operate on a "materialized" range, i.e. a collection of values from
 some input, where all the values are available. However, we do not want to allocate temporary
@@ -335,3 +335,28 @@ std::vector<double> normalize_vector(std::vector<double> input) {
 }
 ~~~
 
+### Custom aggregators
+
+An aggregator is simply any function that takes a range as an input and outputs a single value. This
+example computes the average of the input elements.
+
+~~~c++
+struct average {
+    template <class Input>
+    constexpr auto operator()(Input&& input) const {
+        using element_type = rx::get_output_type_of_t<Input>;
+        auto [count, summed] = rx::zip(rx::seq(1, 0), input)
+            | rx::foldl(std::tuple(size_t(0), element_type{0}),
+                [](auto&& accum, auto&& element) {
+                    return std::tuple(std::get<0>(accum) + std::get<0>(element),
+                                      std::get<1>(accum) + std::get<1>(element));
+                });
+        return summed / element_type(count);
+    }
+};
+
+// Using our new aggregator in practice:
+double compute_average(std::vector<double> values) {
+    return values | average();
+}
+~~~
