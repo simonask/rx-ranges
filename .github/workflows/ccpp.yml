@@ -6,7 +6,7 @@ on:
   pull_request: []
 
 jobs:
-  GCC9:
+  Linux-GCC9:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
@@ -19,8 +19,10 @@ jobs:
     - name: build
       run: ninja -C build
     - name: run tests
-      run: build/rx-ranges-test && build/rx-calendar
-  Clang8:
+      run: build/rx-ranges-test
+    - name: run calendar example
+      run: build/rx-calendar
+  Linux-Clang8:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
@@ -33,8 +35,10 @@ jobs:
     - name: build
       run: ninja -C build
     - name: run tests
-      run: build/rx-ranges-test && build/rx-calendar
-  Clang8-Libcxx:
+      run: build/rx-ranges-test
+    - name: run calendar example
+      run: build/rx-calendar
+  Linux-Clang8-Libcxx:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
@@ -47,8 +51,10 @@ jobs:
     - name: build
       run: ninja -C build
     - name: run tests
-      run: build/rx-ranges-test && build/rx-calendar
-  MSVC:
+      run: build/rx-ranges-test
+    - name: run calendar example
+      run: build/rx-calendar
+  Windows-MSVC:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v1
@@ -64,7 +70,23 @@ jobs:
       run: build/Debug/rx-ranges-test.exe
     - name: run calendar example
       run: build/Debug/rx-calendar.exe
-  GCC9-Benchmark:
+  macOS-Clang:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: install dependencies
+      run: brew install ninja boost
+    - name: make build dir
+      run: mkdir build
+    - name: configure
+      run: cd build && cmake .. -DCMAKE_BUILD_TYPE=Debug -DRX_TEST=ON -GNinja && cd ..
+    - name: build
+      run: ninja -C build
+    - name: run tests
+      run: build/rx-ranges-test
+    - name: run calendar example
+      run: build/rx-calendar
+  Linux-GCC9-Benchmark:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
@@ -77,8 +99,10 @@ jobs:
     - name: build
       run: ninja -C build
     - name: run tests
-      run: build/rx-ranges-test && build/rx-benchmark
-  Clang8-Benchmark:
+      run: build/rx-ranges-test
+    - name: run benchmarks
+      run: build/rx-benchmark
+  Linux-Clang8-Benchmark:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
@@ -92,7 +116,7 @@ jobs:
       run: ninja -C build
     - name: run tests
       run: build/rx-ranges-test && build/rx-benchmark
-  MSVC-Benchmark:
+  Windows-MSVC-Benchmark:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v1
@@ -108,19 +132,35 @@ jobs:
       run: build/Release/rx-ranges-test.exe
     - name: run benchmarks
       run: build/Release/rx-benchmark.exe
-  # TODO: libbenchmark is built with libstdc++, so this segfaults on startup. We need to build
-  # libbenchmark ourselves.
-  # Clang8-libcxx-Benchmark:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #   - uses: actions/checkout@v1
-  #   - name: install dependencies
-  #     run: (sudo apt-get update && sudo apt-get install libbenchmark-dev libboost-date-time-dev doctest-dev ninja-build cmake build-essential clang-8 libc++-8-dev libc++abi-8-dev)
-  #   - name: make build dir
-  #     run: mkdir build
-  #   - name: configure
-  #     run: (cd build && cmake .. -G Ninja -DRX_TEST=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=/usr/bin/clang++-8 -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_FLAGS="-stdlib=libc++" -DCMAKE_EXE_LINKER_FLAGS="-lc++ -lm -lc -lgcc_s -lgcc")
-  #   - name: build
-  #     run: ninja -C build
-  #   - name: run tests
-  #     run: build/rx-ranges-test && build/rx-benchmark
+  macOS-Clang-Benchmark:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: install dependencies
+      run: brew install ninja boost
+    - name: make build dir
+      run: mkdir build
+    - name: configure
+      run: cd build && cmake .. -DCMAKE_BUILD_TYPE=Release -DRX_TEST=ON -GNinja && cd ..
+    - name: build
+      run: ninja -C build
+    - name: run tests
+      run: build/rx-ranges-test
+    - name: run benchmarks
+      run: build/rx-benchmark
+  Linux-Clang8-libcxx-Benchmark:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: install dependencies
+      run: (sudo apt-get update && sudo apt-get install libboost-date-time-dev ninja-build cmake build-essential clang-8 libc++-8-dev libc++abi-8-dev)
+    - name: make build dir
+      run: mkdir build
+    - name: configure
+      run: (cd build && cmake .. -G Ninja -DRX_TEST=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=/usr/bin/clang++-8 -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_FLAGS="-stdlib=libc++" -DCMAKE_EXE_LINKER_FLAGS="-lc++ -lm -lc -lgcc_s -lgcc")
+    - name: build
+      run: ninja -C build
+    - name: run tests
+      run: build/rx-ranges-test
+    - name: run benchmarks
+      run: build/rx-benchmark
