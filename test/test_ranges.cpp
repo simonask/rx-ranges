@@ -259,6 +259,12 @@ TEST_CASE("ranges fill") {
     std::string b;
     fill('b') | first_n(5) | append(b);
     CHECK(b == "bbbbb");
+
+    int v = 7;
+    CHECK((fill(v) | take(5) | sum()) == 7*5);
+    CHECK(v == 7);
+    CHECK((fill_n(5, v) | sum()) == 7*5);
+    CHECK(v == 7);
 }
 
 TEST_CASE("ranges sum") {
