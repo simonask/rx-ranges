@@ -1071,13 +1071,13 @@ struct until {
 
         R input;
         P pred;
-        bool end = false;
+        bool done = false;
 
         template <class Rx, class Px>
         constexpr Range(Rx&& input, Px&& pred) noexcept
-            : input(std::forward<Rx>(input)), pred(std::forward<Px>(pred)), end(input.at_end()) {
-            if (!end) {
-                end = pred(input.get());
+            : input(std::forward<Rx>(input)), pred(std::forward<Px>(pred)), done(input.at_end()) {
+            if (!done) {
+                done = pred(input.get());
             }
         }
 
@@ -1094,14 +1094,14 @@ struct until {
         constexpr void next() noexcept {
             RX_ASSERT(!at_end());
             input.next();
-            end = input.at_end();
-            if (!end) {
-                end = pred(input.get());
+            done = input.at_end();
+            if (!done) {
+                done = pred(input.get());
             }
         }
 
         [[nodiscard]] constexpr bool at_end() const noexcept {
-            return end;
+            return done;
         }
 
         constexpr size_t size_hint() const noexcept {
