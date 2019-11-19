@@ -228,7 +228,7 @@ TEST_CASE("ranges generate reentrant") {
 }
 
 TEST_CASE("ranges until") {
-    auto input = seq() | until([](int x) { return x == 5; }) | take(10);
+    auto input = seq() | until([](int x) { return x == 5; });
     auto result = input | to_vector();
     auto expected = seq() | first_n(5) | to_vector();
     CHECK(result == expected);
@@ -667,6 +667,33 @@ TEST_CASE("ranges ad-hoc lambdas") {
 
     auto result = seq() | f | to_vector();
     CHECK(result == std::vector{{1, 3, 5, 7, 9}});
+}
+
+TEST_CASE("ranges flatten") {
+    auto l0 = seq(11) | take(3);
+    auto l1 = fill_n(3, l0);
+    auto l2 = fill_n(3, l1);
+    auto l3 = fill_n(3, l2);
+
+    auto flatten0 = l3 | flatten<0>();
+    auto flatten1 = l3 | flatten();
+    auto flatten2 = l3 | flatten<2>();
+    auto flatten3 = l3 | flatten<3>();
+
+    CHECK((flatten0 | count()) == 3);
+    CHECK((flatten1 | count()) == 3*3);
+    CHECK((flatten2 | count()) == 3*3*3);
+    CHECK((flatten3 | count()) == 3*3*3*3);
+
+    CHECK((flatten3 | sum()) == 3*3*3 * (11+12+13));
+}
+
+TEST_CASE("ranges null_sink") {
+    int a = 0;
+    int b = 0;
+    generate([&]{ return ++a; }) | take(5) | transform([&](auto v) { CHECK(v == ++b); return v; }) | append(null_sink());
+    CHECK(a == 5);
+    CHECK(b == 5);
 }
 
 /*

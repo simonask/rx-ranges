@@ -103,6 +103,7 @@ Algorithms that produce ranges from the output of other ranges.
   reach their end.
 - `zip()`: Produce tuples of values from multiple input ranges, until one of the ranges reaches its
   end.
+- `flatten()`: Return a range flattening one level of nesting in a range of ranges.
 
 ### Aggregators
 
@@ -140,7 +141,7 @@ temporary allocations. However, if a sink is chained with an aggregator or combi
 - `to_opt()`: Produce a single `std::optional` containing the last element of the input, or
   `std::nullopt` if the input was empty.
 - `to_set()`: Produce an `std::set` from elements of the input.
-
+- `null_sink()`: A sink that simply discards all elements of a range.
 
 ## Examples
 
