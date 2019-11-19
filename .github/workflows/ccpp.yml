@@ -11,7 +11,7 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: install dependencies
-      run: (sudo apt-get update && sudo apt-get install libboost-date-time-dev libbenchmark-dev doctest-dev ninja-build cmake build-essential g++-9)
+      run: (sudo apt-get update && sudo apt-get install libboost-date-time-dev ninja-build cmake build-essential g++-9)
     - name: make build dir
       run: mkdir build
     - name: configure
@@ -25,7 +25,7 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: install dependencies
-      run: (sudo apt-get update && sudo apt-get install libbenchmark-dev libboost-date-time-dev doctest-dev ninja-build cmake build-essential clang-8)
+      run: (sudo apt-get update && sudo apt-get install libboost-date-time-dev ninja-build cmake build-essential clang-8)
     - name: make build dir
       run: mkdir build
     - name: configure
@@ -39,7 +39,7 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: install dependencies
-      run: (sudo apt-get update && sudo apt-get install libbenchmark-dev libboost-date-time-dev doctest-dev ninja-build cmake build-essential clang-8 libc++-8-dev libc++abi-8-dev)
+      run: (sudo apt-get update && sudo apt-get install libboost-date-time-dev ninja-build cmake build-essential clang-8 libc++-8-dev libc++abi-8-dev)
     - name: make build dir
       run: mkdir build
     - name: configure
@@ -53,7 +53,7 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: install dependencies
-      run: '& "$Env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install doctest:x64-windows benchmark:x64-windows boost-date-time:x64-windows'
+      run: '& "$Env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install boost-date-time:x64-windows'
     - name: make build dir
       run: md build
     - name: configure
@@ -69,7 +69,7 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: install dependencies
-      run: (sudo apt-get update && sudo apt-get install libboost-date-time-dev libbenchmark-dev doctest-dev ninja-build cmake build-essential g++-9)
+      run: (sudo apt-get update && sudo apt-get install libboost-date-time-dev ninja-build cmake build-essential g++-9)
     - name: make build dir
       run: mkdir build
     - name: configure
@@ -83,7 +83,7 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: install dependencies
-      run: (sudo apt-get update && sudo apt-get install libbenchmark-dev libboost-date-time-dev doctest-dev ninja-build cmake build-essential clang-8)
+      run: (sudo apt-get update && sudo apt-get install libboost-date-time-dev ninja-build cmake build-essential clang-8)
     - name: make build dir
       run: mkdir build
     - name: configure
@@ -97,7 +97,7 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: install dependencies
-      run: '& "$Env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install doctest:x64-windows benchmark:x64-windows boost-date-time:x64-windows'
+      run: '& "$Env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install boost-date-time:x64-windows'
     - name: make build dir
       run: md build
     - name: configure
