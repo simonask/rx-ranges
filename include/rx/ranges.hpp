@@ -836,8 +836,7 @@ fill(T &&)->fill<remove_cvref_t<T>>;
 template <class F>
 struct transform {
     F func;
-    template <class Fx>
-    explicit constexpr transform(Fx&& func) noexcept : func(std::forward<Fx>(func)) {}
+    explicit constexpr transform(F func) noexcept : func(std::move(func)) {}
 
     template <class InputRange>
     struct Range {
@@ -897,8 +896,7 @@ transform(F &&)->transform<remove_cvref_t<F>>;
 template <class P>
 struct filter {
     P pred;
-    template <class Q>
-    constexpr explicit filter(Q&& pred) : pred(std::forward<Q>(pred)) {}
+    constexpr explicit filter(P pred) : pred(std::move(pred)) {}
 
     template <class R>
     struct Range {
@@ -1076,8 +1074,7 @@ struct skip_n {
 template <class P>
 struct until {
     P pred;
-    template <class T>
-    constexpr explicit until(T&& pred) : pred(std::forward<T>(pred)) {}
+    constexpr explicit until(P pred) : pred(std::move(pred)) {}
 
     template <class R>
     struct Range {
@@ -1090,9 +1087,8 @@ struct until {
         P pred;
         bool done = false;
 
-        template <class Rx, class Px>
-        constexpr Range(Rx&& input, Px&& pred) noexcept
-            : input(std::forward<Rx>(input)), pred(std::forward<Px>(pred)), done(input.at_end()) {
+        constexpr Range(R input, P pred) noexcept
+            : input(std::move(input)), pred(std::move(pred)), done(input.at_end()) {
             if (!done) {
                 done = pred(input.get());
             }
@@ -1414,11 +1410,12 @@ struct in_groups_of {
 template <class P, class Compare = std::equal_to<void>, size_t group_size_hint = 8>
 struct group_adjacent_by : private Compare {
     P pred;
-    template <class T, class C>
-    constexpr explicit group_adjacent_by(T&& pred, C&& cmp)
-        : Compare(std::forward<C>(cmp)), pred(std::forward<T>(pred)) {}
-    template <class T>
-    constexpr explicit group_adjacent_by(T&& pred) : pred(std::forward<T>(pred)) {}
+    constexpr explicit group_adjacent_by(P pred, Compare cmp)
+        : Compare(std::move(cmp)), pred(std::move(pred)) {}
+
+    // Only enabled if C is default-constructible.
+    template <class Cx = Compare>
+    constexpr explicit group_adjacent_by(P pred) : pred(std::move(pred)) {}
 
     template <class R>
     struct Range : private Compare {
@@ -1614,9 +1611,8 @@ struct foldl {
     T init;
     F func;
 
-    template <class U, class E>
-    constexpr foldl(U&& init, E&& func)
-        : init(std::forward<U>(init)), func(std::forward<E>(func)) {}
+    constexpr foldl(T init, F func)
+        : init(std::move(init)), func(std::move(func)) {}
 
     template <class InputRange>
     constexpr T operator()(InputRange&& input) {
@@ -1665,8 +1661,7 @@ struct sum {
 */
 template <class Compare = std::less<void>>
 struct max : private Compare {
-    template <class... Args>
-    constexpr max(Args&&... args) noexcept : Compare(std::forward<Args>(args)...) {}
+    constexpr max(Compare cmp) noexcept : Compare(std::move(cmp)) {}
     constexpr max() = default;
 
     template <class R>
@@ -1700,8 +1695,7 @@ max()->max<>;
 
 template <class Compare = std::less<void>>
 struct min : private Compare {
-    template <class... Args>
-    constexpr min(Args&&... args) noexcept : Compare(std::forward<Args>(args)...) {}
+    constexpr min(Compare cmp) noexcept : Compare(std::move(cmp)) {}
     constexpr min() = default;
 
     template <class R>
@@ -1740,8 +1734,7 @@ template <class P>
 struct any_of {
     P pred;
 
-    template <class T>
-    constexpr explicit any_of(T&& pred) : pred(std::forward<T>(pred)) {}
+    constexpr explicit any_of(P pred) : pred(std::move(pred)) {}
 
     template <class R>
     [[nodiscard]] constexpr bool operator()(R&& range) const {
@@ -1769,8 +1762,7 @@ template <class P>
 struct all_of {
     P pred;
 
-    template <class T>
-    constexpr explicit all_of(T&& pred) : pred(std::forward<T>(pred)) {}
+    constexpr explicit all_of(P pred) : pred(std::move(pred)) {}
 
     template <class R>
     [[nodiscard]] constexpr bool operator()(R&& range) {
@@ -1797,8 +1789,7 @@ all_of(P &&)->all_of<P>;
 template <class P>
 struct none_of {
     P pred;
-    template <class T>
-    constexpr explicit none_of(T&& pred) : pred(std::forward<T>(pred)) {}
+    constexpr explicit none_of(P pred) : pred(std::move(pred)) {}
 
     template <class R>
     [[nodiscard]] constexpr bool operator()(R&& range) {
@@ -1826,8 +1817,7 @@ none_of(P &&)->none_of<P>;
 template <class F>
 struct for_each {
     F func;
-    template <class T>
-    constexpr explicit for_each(T&& func) : func(std::forward<T>(func)) {}
+    constexpr explicit for_each(F func) : func(std::move(func)) {}
 
     template <class R>
     constexpr void operator()(R&& range) {
@@ -1879,8 +1869,7 @@ append(C &&)->append<C&&>;
 /// Writes the result of the inner range to the output, and sorts the output container.
 template <class Compare = std::less<void>>
 struct sort : private Compare {
-    template <class... Args>
-    constexpr explicit sort(Args&&... args) noexcept : Compare(std::forward<Args>(args)...) {}
+    constexpr explicit sort(Compare cmp) noexcept : Compare(std::move(cmp)) {}
     constexpr sort() = default;
 
     template <class InputRange>
@@ -1937,8 +1926,8 @@ sort()->sort<>;
 /// should be removed, sort the range first.
 template <class Compare = std::equal_to<void>>
 struct uniq : private Compare {
-    template <class C>
-    constexpr explicit uniq(C&& cmp) noexcept : Compare(std::forward<C>(cmp)) {}
+    constexpr explicit uniq(Compare cmp) noexcept : Compare(std::move(cmp)) {}
+    constexpr uniq() = default;
 
     template <class InputRange>
     struct Range : private Compare {
@@ -1958,12 +1947,21 @@ struct uniq : private Compare {
     };
 
     template <class InputRange>
-    [[nodiscard]] constexpr auto operator()(InputRange&& input) const noexcept {
+    [[nodiscard]] constexpr auto operator()(InputRange&& input) const& noexcept {
         // Note: We don't want to use as_input_range(), because it would copy the input when
         // chaining sinks.
         using Inner = remove_cvref_t<InputRange>;
         const Compare& cmp = *this;
         return Range<Inner>{std::forward<InputRange>(input), cmp};
+    }
+
+    template <class InputRange>
+    [[nodiscard]] constexpr auto operator()(InputRange&& input) && noexcept {
+        // Note: We don't want to use as_input_range(), because it would copy the input when
+        // chaining sinks.
+        using Inner = remove_cvref_t<InputRange>;
+        Compare& cmp = *this;
+        return Range<Inner>{std::forward<InputRange>(input), std::move(cmp)};
     }
 };
 template <class Compare>
@@ -2011,12 +2009,8 @@ struct reverse {
 template <class T>
 struct empty_range : public iterator_range<T*> {
     constexpr empty_range() noexcept : iterator_range<T*>(nullptr, nullptr) {}
-    template <class A>
-    constexpr empty_range(A&&) noexcept : empty_range() {}
 };
-empty_range()->empty_range<int>;
-template <class T>
-empty_range(T &&)->empty_range<remove_cvref_t<T>>;
+empty_range()->empty_range<void*>;
 
 template <class... Rs>
 struct ChainRange {
@@ -2029,8 +2023,7 @@ struct ChainRange {
     std::tuple<Rs...> inner_tpl;
     size_t n = 0;
 
-    template <class... Rx>
-    explicit constexpr ChainRange(Rx&&... inner_tpl) : inner_tpl(std::forward<Rx>(inner_tpl)...) {
+    explicit constexpr ChainRange(std::tuple<Rs...> inner_tpl) : inner_tpl(std::move(inner_tpl)) {
         _skip_to_data(std::make_index_sequence<sizeof...(Rs)>{});
     }
 
@@ -2143,7 +2136,7 @@ template <class... InputRanges>
             std::forward_as_tuple(as_input_range(std::forward<InputRanges>(inputs))...));
     } else {
         return ChainRange<get_range_type_t<InputRanges>...>{
-            as_input_range(std::forward<InputRanges>(inputs))...};
+            std::forward_as_tuple(as_input_range(std::forward<InputRanges>(inputs))...)};
     }
 }
 
@@ -2220,8 +2213,7 @@ struct cycle {
 template <class V>
 struct padded {
     V value;
-    template <class Vx>
-    explicit constexpr padded(Vx&& value) noexcept : value(std::forward<Vx>(value)) {}
+    explicit constexpr padded(V value) noexcept : value(std::move(value)) {}
 
     template <class R>
     struct Range {
@@ -2232,9 +2224,8 @@ struct padded {
         static constexpr bool is_finite = false;
         static constexpr bool is_idempotent = is_idempotent_v<R>;
 
-        template <class Rx, class Vx>
-        constexpr Range(Rx&& input, Vx&& value) noexcept
-            : input(std::forward<Rx>(input)), value(std::forward<Vx>(value)) {}
+        constexpr Range(R input, V value) noexcept
+            : input(std::move(input)), value(std::move(value)) {}
 
         constexpr void next() {
             RX_ASSERT(!at_end());
@@ -2293,8 +2284,7 @@ struct ZipLongestRange {
     static constexpr bool is_finite = (is_finite_v<Inputs> && ...);
     static constexpr bool is_idempotent = (is_idempotent_v<Inputs> && ...);
 
-    template <class... Tx>
-    constexpr explicit ZipLongestRange(std::tuple<Tx...>&& tuple) : inputs(tuple) {}
+    constexpr explicit ZipLongestRange(std::tuple<Inputs...> tuple) : inputs(std::move(tuple)) {}
 
     [[nodiscard]] constexpr output_type get() const noexcept {
         RX_ASSERT(!at_end());
@@ -2346,7 +2336,7 @@ private:
     }
 };
 template <class... Inputs>
-ZipLongestRange(std::tuple<Inputs...> &&)->ZipLongestRange<remove_cvref_t<Inputs>...>;
+ZipLongestRange(std::tuple<Inputs...>)->ZipLongestRange<remove_cvref_t<Inputs>...>;
 
 /*!
     @brief Zip two or more ranges, return longest range.
@@ -2356,7 +2346,6 @@ ZipLongestRange(std::tuple<Inputs...> &&)->ZipLongestRange<remove_cvref_t<Inputs
 */
 template <class... Inputs>
 [[nodiscard]] constexpr auto zip_longest(Inputs&&... inputs) noexcept {
-    // For some reason, argument deduction doesn't work here.
     return ZipLongestRange(std::forward_as_tuple(as_input_range(std::forward<Inputs>(inputs))...));
 }
 
@@ -2433,8 +2422,7 @@ struct flatten<1> {
         R outer_range;
         RX_OPTIONAL<S> inner_range;
 
-        template <class Rx>
-        constexpr explicit Range(Rx&& input) : outer_range(std::forward<Rx>(input)) {
+        constexpr explicit Range(R input) : outer_range(std::move(input)) {
             while (RX_LIKELY(!outer_range.at_end())) {
                 inner_range.emplace(as_input_range(outer_range.get()));
                 if (RX_LIKELY(!inner_range->at_end())) {

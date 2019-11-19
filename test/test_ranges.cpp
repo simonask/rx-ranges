@@ -519,23 +519,23 @@ TEST_CASE("ranges non-default-constructible, non-copyable predicate") {
     static_assert(!std::is_default_constructible_v<Compare>);
 
     auto in = seq() | take(10);
-    auto vec = in | sort<Compare>(0) | to_vector();
+    auto vec = in | sort(Compare{0}) | to_vector();
     CHECK(vec == (in | to_vector()));
 
-    CHECK((in | sort<Compare>(0) | max<Compare>(0)) == 9);
-    CHECK((in | sort<Compare>(0) | min<Compare>(0)) == 0);
+    CHECK((in | sort(Compare{0}) | max(Compare{0})) == 9);
+    CHECK((in | sort(Compare{0}) | min(Compare{0})) == 0);
 
     // Compile-time check that iterators don't introduce default-constructibility as a requirement.
     // Note: Explicit call to as_input_range() is required here because range-based for loops do not
     //       perfectly-forward to `begin()/end()` (and it would usually be wrong if they did).
-    for (auto x : as_input_range(in | sort<Compare>(0))) {
+    for (auto x : as_input_range(in | sort(Compare{0}))) {
         static_cast<void>(x);
     }
 }
 
 TEST_CASE("ranges empty_range") {
     CHECK((empty_range() | count()) == 0);
-    CHECK((empty_range("test"s) | to_vector()) == std::vector<std::string>());
+    CHECK((empty_range() | to_vector()) == std::vector<void*>());
 }
 
 TEST_CASE("ranges chain") {
