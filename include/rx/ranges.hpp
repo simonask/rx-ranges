@@ -1807,6 +1807,33 @@ struct none_of {
 };
 template <class P>
 none_of(P &&)->none_of<P>;
+    
+template <class P>
+struct contains {
+    const P& pred;
+
+    constexpr explicit contains(const P& pred)
+        : pred(pred)
+    {
+    }
+
+    template <class R>
+    [[nodiscard]] constexpr bool operator()(R&& range) const
+    {
+        // Copying for reentrancy.
+        auto copy = as_input_range(std::forward<R>(range));
+        RX_TYPE_ASSERT(is_finite<decltype(copy)>);
+        while (RX_LIKELY(!copy.at_end())) {
+            if (pred == copy.get()) {
+                return true;
+            }
+            copy.next();
+        }
+        return false;
+    }
+};
+template <class P>
+contains(P &&)->contains<P>;
 
 /*!
     @brief Perform action for each element of the input range.
