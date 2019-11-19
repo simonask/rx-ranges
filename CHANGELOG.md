@@ -43,6 +43,7 @@ for range libraries is supported (see [./test/calendar.cpp](calendar.cpp) for mo
 ### Contributors
 
 - René Kijewski
+- Jules Ricou
 - Simon Ask Ulsnes
 
 ## Version 1.0.1

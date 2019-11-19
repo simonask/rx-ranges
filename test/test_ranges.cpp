@@ -145,6 +145,10 @@ TEST_CASE("ranges zip advance_by") {
     auto input = zip(seq(), seq(1));
     advance_by(input, 10);
     CHECK(input.get() == std::tuple{10, 11});
+
+    auto finite = zip(seq(), seq() | take(5));
+    size_t advanced = advance_by(finite, 6);
+    CHECK(advanced == 5);
 }
 
 TEST_CASE("ranges zip reentrant") {
@@ -224,7 +228,7 @@ TEST_CASE("ranges generate reentrant") {
 }
 
 TEST_CASE("ranges until") {
-    auto input = seq() | until([](int x) { return x == 5; }) | take(10);
+    auto input = seq() | until([](int x) { return x == 5; });
     auto result = input | to_vector();
     auto expected = seq() | first_n(5) | to_vector();
     CHECK(result == expected);
@@ -279,6 +283,12 @@ TEST_CASE("ranges fill") {
     std::string b;
     fill('b') | first_n(5) | append(b);
     CHECK(b == "bbbbb");
+
+    int v = 7;
+    CHECK((fill(v) | take(5) | sum()) == 7*5);
+    CHECK(v == 7);
+    CHECK((fill_n(5, v) | sum()) == 7*5);
+    CHECK(v == 7);
 }
 
 TEST_CASE("ranges sum") {
@@ -373,9 +383,15 @@ TEST_CASE("ranges in_groups_of_exactly, dynamic size") {
 
 TEST_CASE("ranges in_groups_of_exactly advance_by") {
     auto input = seq() | in_groups_of_exactly(4);
-    advance_by(input, 3);  // already at the first group
+    size_t advanced = advance_by(input, 3);  // already at the first group
     auto group = input.get();
     CHECK(group.get() == 16);
+    CHECK(advanced == 3);
+
+    auto finite = seq() | take(11) | in_groups_of_exactly(4);
+    advanced = advance_by(finite, 2);
+    CHECK(finite.at_end());
+    CHECK(advanced == 1);
 }
 
 TEST_CASE("ranges in_groups_of") {
@@ -391,11 +407,7 @@ TEST_CASE("ranges in_groups_of") {
     float last = 0.f;
     auto groups = input | in_groups_of(4);
 
-    // For some reason, MSVC does not correctly find begin()/end() via ADL in range-based for loops
-    // for this particular case. It's a bit of a mystery, since this works for all the other range
-    // types, and there doesn't seem to be any difference in how the in_groups_of() adapter works.
-    for (auto it = begin(groups); it != end(groups); ++it) {
-        auto group = *it;
+    for (auto&& group : groups) {
         CHECK(!group.at_end());
         size_t len = group | count();
         if (len == 4) {
@@ -434,6 +446,13 @@ TEST_CASE("ranges in_groups_of advance_by") {
     advance_by(input, 3);  // already at the first group
     auto group = input.get();
     CHECK(group.get() == 16);
+
+    auto finite = seq() | take(11) | in_groups_of(4);
+    size_t advanced = advance_by(finite, 2);
+    CHECK(advanced == 2);
+    advanced = advance_by(finite, 1);
+    CHECK(advanced == 0);
+    CHECK(finite.at_end());
 }
 
 TEST_CASE("ranges group_adjacent_by") {
@@ -446,12 +465,8 @@ TEST_CASE("ranges group_adjacent_by") {
     size_t num_groups = groups | count();
     CHECK(num_groups == 4);
 
-    // For some reason, MSVC does not correctly find begin()/end() via ADL in range-based for loops
-    // for this particular case. It's a bit of a mystery, since this works for all the other range
-    // types, and there doesn't seem to be any difference in how the in_groups_of() adapter works.
     int previous = std::numeric_limits<int>::max();
-    for (auto it = begin(groups); it != end(groups); ++it) {
-        const auto& group = *it;
+    for (const auto& group : groups) {
         for (auto x : group) {
             CHECK(pred(x) == pred(group.get()));
             CHECK(pred(x) != previous);
@@ -551,6 +566,20 @@ TEST_CASE("ranges chain") {
     CHECK(homogenous_actual == homogenous_expected);
 }
 
+TEST_CASE("ranges chain advance_by") {
+    auto input = chain(seq() | take(3), seq(10) | take(3), seq(20) | take(3));
+    auto result1 = input | to_vector();
+    CHECK(result1 == std::vector{{0, 1, 2, 10, 11, 12, 20, 21, 22}});
+    advance_by(input, 4);
+    auto result2 = input | to_vector();
+    CHECK(result2 == std::vector{{11, 12, 20, 21, 22}});
+    advance_by(input, 3);
+    auto result3 = input | to_vector();
+    CHECK(result3 == std::vector{{21, 22}});
+    advance_by(input, 3); // advance beyond end
+    CHECK(input.at_end());
+}
+
 TEST_CASE("ranges cycle") {
     auto nothing = seq() | take(0) | cycle() | take(10) | to_vector();
     CHECK(nothing == std::vector(0, 0));
@@ -562,10 +591,27 @@ TEST_CASE("ranges cycle") {
     CHECK(zero_one_two == std::vector{{0, 1, 2, 0, 1, 2, 0, 1, 2, 0}});
 }
 
+TEST_CASE("ranges cycle advance_by") {
+    auto input = seq() | take(5) | cycle();
+    advance_by(input, 5); // advancing to the end should wrap around
+    CHECK(input.get() == 0);
+    advance_by(input, 6); // overflow
+    CHECK(input.get() == 1);
+}
+
 TEST_CASE("ranges padded") {
     auto actual = seq() | take(3) | padded(-1) | take(5) | to_vector();
     auto expected = std::vector{{0,1,2,-1,-1}};
     CHECK(actual == expected);
+}
+
+TEST_CASE("ranges padded advance_by") {
+    auto actual = seq() | take(3) | padded(-1);
+    CHECK(actual.get() == 0);
+    advance_by(actual, 2);
+    CHECK(actual.get() == 2);
+    advance_by(actual, 1);
+    CHECK(actual.get() == -1);
 }
 
 TEST_CASE("ranges zip_longest") {
@@ -584,6 +630,70 @@ TEST_CASE("ranges zip_longest") {
         std::make_tuple(RX_OPTIONAL<int>(), RX_OPTIONAL<std::string>(), RX_OPTIONAL(16)),
     };
     CHECK(zipped == expected);
+}
+
+TEST_CASE("ranges zip_longest advance_by") {
+    auto input1 = seq() | first_n(5);
+    auto input2 = input1 | transform(&to_string<int>);
+    auto input3 = seq(10) | first_n(7);
+    auto zipped = zip_longest(input1, input2, input3);
+    advance_by(zipped, 4);
+    auto expected1 = std::make_tuple(RX_OPTIONAL(4), RX_OPTIONAL("4"s), RX_OPTIONAL(14));
+    CHECK(zipped.get() == expected1);
+    advance_by(zipped, 2);
+    auto expected2 = std::make_tuple(RX_OPTIONAL<int>(), RX_OPTIONAL<std::string>(), RX_OPTIONAL(16));
+    CHECK(zipped.get() == expected2);
+    size_t advanced = advance_by(zipped, 2);
+    CHECK(zipped.at_end());
+    CHECK(advanced == 1);
+}
+
+TEST_CASE("ranges tee") {
+    auto container1 = std::vector(0, 0);
+    auto container2 = std::vector(0, 0);
+    seq() | tee(container1) | take(10) | append(container2);
+    CHECK(container1 == container2);
+
+    container1.clear();
+    auto value = seq() | tee(container1) | take(10) | sum();
+    CHECK(container1 == container2);
+    CHECK(value == 9 * 10 / 2);
+}
+
+TEST_CASE("ranges ad-hoc lambdas") {
+    auto f = [](auto&& range) {
+        return range | filter([](auto x) { return x % 2 == 1; }) | take(5);
+    };
+
+    auto result = seq() | f | to_vector();
+    CHECK(result == std::vector{{1, 3, 5, 7, 9}});
+}
+
+TEST_CASE("ranges flatten") {
+    auto l0 = seq(11) | take(3);
+    auto l1 = fill_n(3, l0);
+    auto l2 = fill_n(3, l1);
+    auto l3 = fill_n(3, l2);
+
+    auto flatten0 = l3 | flatten<0>();
+    auto flatten1 = l3 | flatten();
+    auto flatten2 = l3 | flatten<2>();
+    auto flatten3 = l3 | flatten<3>();
+
+    CHECK((flatten0 | count()) == 3);
+    CHECK((flatten1 | count()) == 3*3);
+    CHECK((flatten2 | count()) == 3*3*3);
+    CHECK((flatten3 | count()) == 3*3*3*3);
+
+    CHECK((flatten3 | sum()) == 3*3*3 * (11+12+13));
+}
+
+TEST_CASE("ranges null_sink") {
+    int a = 0;
+    int b = 0;
+    generate([&]{ return ++a; }) | take(5) | transform([&](auto v) { CHECK(v == ++b); return v; }) | append(null_sink());
+    CHECK(a == 5);
+    CHECK(b == 5);
 }
 
 namespace {
@@ -615,9 +725,9 @@ struct convert_to_string {
             return input.size_hint();
         }
 
-        constexpr void advance_by(size_t n) const noexcept {
+        constexpr size_t advance_by(size_t n) const noexcept {
             using rx::advance_by; // Enable ADL.
-            advance_by(input, n);
+            return advance_by(input, n);
         }
     };
 
