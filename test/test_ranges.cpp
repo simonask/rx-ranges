@@ -575,6 +575,15 @@ TEST_CASE("ranges tee") {
     CHECK(value == 9 * 10 / 2);
 }
 
+TEST_CASE("ranges ad-hoc lambdas") {
+    auto f = [](auto&& range) {
+        return range | filter([](auto x) { return x % 2 == 1; }) | take(5);
+    };
+
+    auto result = seq() | f | to_vector();
+    CHECK(result == std::vector{{1, 3, 5, 7, 9}});
+}
+
 /*
 TEST_CASE("ranges append to non-container [no compile]") {
     double not_a_container = 0;
