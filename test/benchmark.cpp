@@ -181,4 +181,101 @@ static void bench_in_groups_of_std(benchmark::State& state) {
 }
 BENCHMARK(bench_in_groups_of_std);
 
+static void bench_cycle_rx(benchmark::State& state) {
+    auto input = seq() | take(10);
+    for (auto _ : state) {
+        auto f = [=]() {
+            return input | cycle() | take(1'000'000) | sum();
+        };
+        benchmark::DoNotOptimize(f());
+    }
+}
+BENCHMARK(bench_cycle_rx);
+
+static void bench_cycle_plain(benchmark::State& state) {
+    for (auto _ : state) {
+        auto f = []() {
+            int sum = 0;
+            for (size_t i = 0; i < 1'000'000; ++i) {
+                sum += int(i % 10);
+            }
+            return sum;
+        };
+        benchmark::DoNotOptimize(f());
+    }
+}
+BENCHMARK(bench_cycle_plain);
+
+static void bench_padded_rx(benchmark::State& state) {
+    std::vector<char> result;
+    result.reserve(1'000'000);
+    for (auto _ : state) {
+        auto f = [&]() {
+            result.clear();
+            fill('a') | take(500'000) | padded('b') | take(1'000'000) | append(result);
+            return 0;
+        };
+        benchmark::DoNotOptimize(f());
+    }
+}
+BENCHMARK(bench_padded_rx);
+
+static void bench_padded_plain(benchmark::State& state) {
+    std::vector<char> result;
+    result.reserve(1'000'000);
+    for (auto _ : state) {
+        auto f = [&]() {
+            result.clear();
+            for (size_t i = 0; i < 1'000'000; ++i) {
+                char c = i < 500'000 ? 'a' : 'b';
+                result.push_back(c);
+            }
+            return 0;
+        };
+        benchmark::DoNotOptimize(f());
+    }
+}
+BENCHMARK(bench_padded_plain);
+
+static void bench_chain_rx(benchmark::State& state) {
+    std::vector<int> input1 = seq() | take(200'000) | to_vector();
+    std::vector<int> input2 = seq(200'000) | take(200'000) | to_vector();
+    std::vector<int> input3 = seq(400'000) | take(200'000) | to_vector();
+    std::vector<int> input4 = seq(600'000) | take(200'000) | to_vector();
+    for (auto _ : state) {
+        auto f = [&]() {
+            return chain(input1, input2, input3, input4) | sum();
+        };
+        benchmark::DoNotOptimize(f());
+    }
+}
+BENCHMARK(bench_chain_rx);
+
+static void bench_chain_plain(benchmark::State& state) {
+    std::vector<int> input1 = seq() | take(200'000) | to_vector();
+    std::vector<int> input2 = seq(200'000) | take(200'000) | to_vector();
+    std::vector<int> input3 = seq(400'000) | take(200'000) | to_vector();
+    std::vector<int> input4 = seq(600'000) | take(200'000) | to_vector();
+    for (auto _ : state) {
+        auto f = [&]() {
+            int sum = 0;
+            for (auto x : input1) {
+                sum += x;
+            }
+            for (auto x : input2) {
+                sum += x;
+            }
+            for (auto x : input3) {
+                sum += x;
+            }
+            for (auto x : input4) {
+                sum += x;
+            }
+            return sum;
+        };
+        benchmark::DoNotOptimize(f());
+    }
+}
+BENCHMARK(bench_chain_plain);
+
 BENCHMARK_MAIN();
