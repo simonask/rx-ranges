@@ -238,6 +238,7 @@ static void bench_padded_plain(benchmark::State& state) {
 BENCHMARK(bench_padded_plain);
 
 static void bench_chain_rx(benchmark::State& state) {
+    // Note: In the "plain" case, Clang is able to autovectorize, making that ~10x faster.
     std::vector<int> input1 = seq() | take(200'000) | to_vector();
     std::vector<int> input2 = seq(200'000) | take(200'000) | to_vector();
     std::vector<int> input3 = seq(400'000) | take(200'000) | to_vector();
@@ -277,5 +278,53 @@ static void bench_chain_plain(benchmark::State& state) {
     }
 }
 BENCHMARK(bench_chain_plain);
+
+static void bench_any_of_rx(benchmark::State& state) {
+    std::vector<int> input = seq() | take(1'000'000) | to_vector();
+    for (auto _ : state) {
+        auto f = [&]() {
+            return input | any_of([](int x) { return x == 500'000; });
+        };
+        benchmark::DoNotOptimize(f());
+    }
+}
+BENCHMARK(bench_any_of_rx);
+
+static void bench_any_of_std(benchmark::State& state) {
+    std::vector<int> input = seq() | take(1'000'000) | to_vector();
+    for (auto _ : state) {
+        auto f = [&]() {
+            return std::any_of(begin(input), end(input), [](int x) {
+                return x == 500'000;
+            });
+        };
+        benchmark::DoNotOptimize(f());
+    }
+}
+BENCHMARK(bench_any_of_std);
+
+static void bench_all_of_rx(benchmark::State& state) {
+    std::vector<int> input = seq() | take(1'000'000) | to_vector();
+    for (auto _ : state) {
+        auto f = [&]() {
+            return input | all_of([](int x) { return x <= 500'000; });
+        };
+        benchmark::DoNotOptimize(f());
+    }
+}
+BENCHMARK(bench_all_of_rx);
+
+static void bench_all_of_std(benchmark::State& state) {
+    std::vector<int> input = seq() | take(1'000'000) | to_vector();
+    for (auto _ : state) {
+        auto f = [&]() {
+            return std::all_of(begin(input), end(input), [](int x) {
+                return x <= 500'000;
+            });
+        };
+        benchmark::DoNotOptimize(f());
+    }
+}
+BENCHMARK(bench_all_of_std);
 
 BENCHMARK_MAIN();
