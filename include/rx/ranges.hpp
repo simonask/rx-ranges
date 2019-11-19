@@ -306,7 +306,8 @@ template <class R, class = std::enable_if_t<is_input_or_sink_v<R>>>
 template <class T, class Enable = void>
 struct has_advance_by : std::false_type {};
 template <class T>
-struct has_advance_by<T, std::void_t<decltype(std::declval<T&>().advance_by(size_t(0)))>> : std::true_type {};
+struct has_advance_by<T, std::void_t<decltype(std::declval<T&>().advance_by(size_t(0)))>>
+    : std::true_type {};
 template <class T>
 constexpr bool has_advance_by_v = has_advance_by<T>::value;
 
@@ -712,7 +713,8 @@ using get_range_type_t = remove_cvref_t<decltype(as_input_range(std::declval<T>(
 // This function is analogous to get_range_type_t. Instead the result of as_input_range() it tells
 // you the result of as_idempotent_input_range().
 template <class T>
-using get_idempotent_range_type_t = remove_cvref_t<decltype(as_idempotent_input_range(std::declval<T>()))>;
+using get_idempotent_range_type_t =
+    remove_cvref_t<decltype(as_idempotent_input_range(std::declval<T>()))>;
 
 // Get the output type of T as if it was converted to a range. This is the output type of the input
 // range after conversion through `as_input_range()`.
@@ -824,7 +826,7 @@ struct fill {
     }
 };
 template <class T>
-fill(T&&)->fill<remove_cvref_t<T>>;
+fill(T &&)->fill<remove_cvref_t<T>>;
 
 /*!
     @brief Transform a range of values by a function F.
@@ -961,7 +963,8 @@ struct filter {
     template <class InputRange>
     [[nodiscard]] constexpr auto operator()(InputRange&& input) && {
         using Inner = get_idempotent_range_type_t<InputRange>;
-        return Range<Inner>{as_idempotent_input_range(std::forward<InputRange>(input)), std::move(pred)};
+        return Range<Inner>{as_idempotent_input_range(std::forward<InputRange>(input)),
+                            std::move(pred)};
     }
 };
 template <class F>
@@ -1132,7 +1135,8 @@ struct until {
     template <class InputRange>
     constexpr auto operator()(InputRange&& input) && {
         using Inner = get_idempotent_range_type_t<InputRange>;
-        return Range<Inner>{as_idempotent_input_range(std::forward<InputRange>(input)), std::move(pred)};
+        return Range<Inner>{as_idempotent_input_range(std::forward<InputRange>(input)),
+                            std::move(pred)};
     }
 };
 template <class P>
@@ -1854,7 +1858,7 @@ struct append {
     }
 };
 template <class C>
-struct append <C&&> {
+struct append<C&&> {
     C out;
     constexpr explicit append(C&& out) : out(std::move(out)) {}
 
@@ -1868,7 +1872,7 @@ struct append <C&&> {
 template <class C>
 append(C&)->append<C>;
 template <class C>
-append(C&&)->append<C&&>;
+append(C &&)->append<C&&>;
 
 /// Sorting sink.
 ///
@@ -2012,7 +2016,7 @@ struct empty_range : public iterator_range<T*> {
 };
 empty_range()->empty_range<int>;
 template <class T>
-empty_range(T&&)->empty_range<remove_cvref_t<T>>;
+empty_range(T &&)->empty_range<remove_cvref_t<T>>;
 
 template <class... Rs>
 struct ChainRange {
@@ -2061,8 +2065,8 @@ private:
 
     template <std::size_t... Index>
     constexpr void _next(std::index_sequence<Index...>) noexcept {
-        using Fn = bool(*)(ChainRange&);
-        constexpr Fn fns[] = { &_next_at<Index>... };
+        using Fn = bool (*)(ChainRange&);
+        constexpr Fn fns[] = {&_next_at<Index>...};
         if (RX_UNLIKELY(fns[n](*this))) {
             _skip_to_data(std::make_index_sequence<sizeof...(Rs)>{});
         }
@@ -2077,8 +2081,8 @@ private:
 
     template <std::size_t... Index>
     constexpr output_type _get(std::index_sequence<Index...>) const {
-        using Fn = output_type(*)(const ChainRange&);
-        constexpr Fn fns[] = { &_get_at<Index>... };
+        using Fn = output_type (*)(const ChainRange&);
+        constexpr Fn fns[] = {&_get_at<Index>...};
         return fns[n](*this);
     }
 
@@ -2089,8 +2093,8 @@ private:
 
     template <size_t... Index>
     constexpr size_t _advance_by(std::index_sequence<Index...>, size_t by) noexcept {
-        using Fn = size_t(*)(ChainRange&, size_t remainder);
-        constexpr Fn fns[] = { &_advance_by_at<Index>... };
+        using Fn = size_t (*)(ChainRange&, size_t remainder);
+        constexpr Fn fns[] = {&_advance_by_at<Index>...};
         size_t remainder = by;
         while (remainder > 0 && !at_end()) {
             size_t advanced = fns[n](*this, remainder);
@@ -2111,8 +2115,8 @@ private:
 
     template <std::size_t... Index>
     constexpr void _skip_to_data(std::index_sequence<Index...>) {
-        using Fn = bool(*)(const ChainRange&);
-        constexpr Fn fns[] = { &_at_end_at<Index>... };
+        using Fn = bool (*)(const ChainRange&);
+        constexpr Fn fns[] = {&_at_end_at<Index>...};
         do {
             if (RX_LIKELY(!fns[n](*this))) {
                 return;
@@ -2135,9 +2139,11 @@ template <class... InputRanges>
     if constexpr (sizeof...(InputRanges) == 0) {
         return empty_range();
     } else if constexpr (sizeof...(InputRanges) == 1) {
-        return std::get<0>(std::forward_as_tuple(as_input_range(std::forward<InputRanges>(inputs))...));
+        return std::get<0>(
+            std::forward_as_tuple(as_input_range(std::forward<InputRanges>(inputs))...));
     } else {
-        return ChainRange<get_range_type_t<InputRanges>...>{as_input_range(std::forward<InputRanges>(inputs))...};
+        return ChainRange<get_range_type_t<InputRanges>...>{
+            as_input_range(std::forward<InputRanges>(inputs))...};
     }
 }
 
@@ -2254,11 +2260,11 @@ struct padded {
             return std::numeric_limits<size_t>::max();
         }
 
-         constexpr size_t advance_by(size_t n) noexcept {
-             using RX_NAMESPACE::advance_by;
-             size_t advanced = advance_by(input, n);
-             return advanced % n;
-         }
+        constexpr size_t advance_by(size_t n) noexcept {
+            using RX_NAMESPACE::advance_by;
+            size_t advanced = advance_by(input, n);
+            return advanced % n;
+        }
     };
 
     template <class InputRange>
@@ -2268,7 +2274,7 @@ struct padded {
     }
 
     template <class InputRange>
-    [[nodiscard]] constexpr auto operator()(InputRange&& input) && noexcept {
+        [[nodiscard]] constexpr auto operator()(InputRange&& input) && noexcept {
         using Inner = get_range_type_t<InputRange>;
         return Range<Inner>{as_input_range(std::forward<InputRange>(input)), std::move(value)};
     }
@@ -2276,7 +2282,7 @@ struct padded {
 template <class V>
 padded(V&)->padded<remove_cvref_t<V>>;
 template <class V>
-padded(V&&)->padded<remove_cvref_t<V>>;
+padded(V &&)->padded<remove_cvref_t<V>>;
 
 template <class... Inputs>
 struct ZipLongestRange {
@@ -2407,7 +2413,7 @@ struct flatten;
 flatten()->flatten<1>;
 
 template <>
-struct flatten <0> {
+struct flatten<0> {
     template <class InputRange>
     [[nodiscard]] constexpr auto operator()(InputRange&& input) const noexcept {
         return std::forward<InputRange>(input);
@@ -2415,7 +2421,7 @@ struct flatten <0> {
 };
 
 template <>
-struct flatten <1> {
+struct flatten<1> {
     template <class R>
     struct Range {
         using S = get_range_type_t<get_output_type_of_t<R>>;
