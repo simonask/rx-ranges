@@ -582,6 +582,24 @@ TEST_CASE("ranges ad-hoc lambdas") {
     CHECK(result == std::vector{{1, 3, 5, 7, 9}});
 }
 
+//TEST_CASE("ranges conditional") {
+//    auto is_odd = [](auto v) { return v % 2 == 1; };
+//    auto odd = std::vector(0, 0);
+//    auto even = std::vector(0, 0);
+//
+//    auto a = lambda() | spy([&](auto v) { odd.push_back(v); }) | transform([](auto v) { return -v; });
+//    auto b = lambda() | spy([&](auto v) { even.push_back(v); }) | filter([](auto v) { return v < 5; });
+//
+//    auto values = seq() | conditional(
+//        is_odd,
+//        a,
+//        b
+//    ) | take(10) | to_vector();
+//    CHECK(odd == std::vector{{1,3,5,7,9}});
+//    CHECK(even == std::vector{{0,2,4,6,8}});
+//    CHECK(values == std::vector{{0,-1,2,-3,4,-5,-7,-9}});
+//}
+
 /*
 TEST_CASE("ranges append to non-container [no compile]") {
     double not_a_container = 0;

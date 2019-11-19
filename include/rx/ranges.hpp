@@ -213,6 +213,16 @@ struct is_tuple_like<T, std::void_t<decltype(std::tuple_size<T>::value)>> : std:
 template <class T>
 constexpr bool is_tuple_like_v = is_tuple_like<remove_cvref_t<T>>::value;
 
+// True if T is an RX_OPTIONAL<>.
+template <class T, class Enable = void>
+struct is_rxoptional : std::false_type {};
+template <class T>
+struct is_rxoptional<RX_OPTIONAL<T>> : std::true_type { using type = T; };
+template <class T>
+constexpr bool is_rxoptional_v = is_rxoptional<remove_cvref_t<T>>::value;
+template <class T>
+using rxoptional_of_t = typename is_rxoptional<remove_cvref_t<T>>::type;
+
 // Trait for input ranges to indicate whether they output a finite number of elements.
 template <class T, class Enable = void>
 struct is_finite : std::false_type {};
@@ -599,7 +609,7 @@ struct idempotent_range {
     static constexpr bool is_finite = is_finite_v<R>;
     static constexpr bool is_idempotent = true;
     using element_type = remove_cvref_t<typename R::output_type>;
-    using storage_type = RX_OPTIONAL<element_type>; 
+    using storage_type = RX_OPTIONAL<element_type>;
     using output_type = const element_type&;
 
     R inner_;
@@ -2250,7 +2260,7 @@ template <class V>
 padded(V&)->padded<remove_cvref_t<V>>;
 template <class V>
 padded(V&&)->padded<remove_cvref_t<V>>;
-  
+
 template <class... Inputs>
 struct ZipLongestRange {
     static_assert(sizeof...(Inputs) > 0);
@@ -2358,6 +2368,170 @@ struct tee {
 };
 template <class Dest>
 tee(Dest&)->tee<remove_cvref_t<Dest>>;
+
+/// Transform using then_func if predicate is true, otherwise use else_func.
+template <class P, class T, class E>
+struct conditional {
+    P pred_func;
+    T then_func;
+    E else_func;
+
+    template <class Px, class Tx, class Ex>
+    explicit constexpr conditional(Px&& pred_func, Tx&& then_func, Ex&& else_func)
+        : pred_func(std::forward<Px>(pred_func)), then_func(std::forward<Tx>(then_func)),
+            else_func(std::forward<Ex>(else_func)) {}
+
+    template <class R>
+    struct Range {
+        using element_type = get_output_type_of_t<R>;
+        using output_type = std::common_type_t<
+            std::invoke_result<const T&, element_type>, std::invoke_result<const E&, element_type>>;
+        static constexpr bool is_finite = is_finite_v<R>;
+        static constexpr bool is_idempotent = false; // we call pred(input.get()) everytime get() is called
+
+        R input;
+        conditional c;
+
+        constexpr output_type get() const {
+            RX_ASSERT(!at_end());
+            auto&& value = input.get();
+            const auto& const_value = value;
+            if (c.pred_func(const_value)) {
+                return c.then_func(std::forward<decltype(value)>(value));
+            } else {
+                return c.else_func(std::forward<decltype(value)>(value));
+            }
+        }
+
+        constexpr void next() {
+            RX_ASSERT(!at_end());
+            input.next();
+        }
+
+        constexpr bool at_end() const {
+            return input.at_end();
+        }
+
+        constexpr size_t size_hint() const {
+            return input.size_hint();
+        }
+    };
+
+    template <class InputRange>
+    [[nodiscard]] constexpr auto operator()(InputRange&& input) const& {
+        using Inner = get_range_type_t<InputRange>;
+        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), *this};
+    }
+
+    template <class InputRange>
+    [[nodiscard]] constexpr auto operator()(InputRange&& input) && {
+        using Inner = get_range_type_t<InputRange>;
+        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), std::move(*this)};
+    }
+};
+template <class P, class T, class E>
+conditional(P&&, T&&, E&&)->conditional<remove_cvref_t<P>, remove_cvref_t<T>, remove_cvref_t<E>>;
+
+/// Choose a proper handling for each element in a range.
+///
+/// For each element `e` in a range, `e` is first examined by a predicate. The predicate then
+/// returns an integer `n` (`0 <= n && n < sizeof...(Fs)`). The value `e` is then passed to the
+/// function at that index. The function result then gets passed along.
+///
+/// `disjunction(pred, f0, f1, f2)` is functionally the same as
+///
+/// ```c++
+/// transform([](auto&& value) {
+///     switch (pred(value)) {
+///         case 0: return f0(std::forward<decltype(value)>(value));
+///         case 1: return f1(std::forward<decltype(value)>(value));
+///         case 2: return f2(std::forward<decltype(value)>(value));
+///         default: assert(false);
+///     }
+/// })
+/// ```
+template <class P, class... Fs>
+struct disjunction {
+    static_assert(sizeof...(Fs) >= 2);
+
+    P pred;
+    std::tuple<Fs...> funcs;
+
+    template <class Px, class... Fx>
+    explicit constexpr disjunction(Px&& pred, Fx&&... funcs)
+        : pred(std::forward<Px>(pred)), funcs(std::forward<Px>(funcs)...) {}
+
+    template <class R>
+    struct Range {
+        using element_type = get_output_type_of_t<R>;
+        using output_type = std::common_type_t<std::invoke_result<const Fs&, element_type>...>;
+        static constexpr bool is_finite = is_finite_v<R>;
+        static constexpr bool is_idempotent = false; // we call pred(input.get()) everytime get() is called
+
+        R input;
+        disjunction d;
+
+        constexpr output_type get() const {
+            return _get(std::index_sequence_for<Fs...>{});
+        }
+
+        constexpr void next() {
+            input.next();
+        }
+
+        constexpr bool at_end() const {
+            return input.at_end();
+        }
+
+        constexpr size_t size_hint() const {
+            return input.size_hint();
+        }
+
+    private:
+        template <size_t... Index>
+        constexpr output_type _get(std::index_sequence<Index...>) const {
+            RX_ASSERT(!at_end());
+            auto&& value = input.get();
+
+            const auto& const_value = value;
+            size_t n = d.pred(const_value);
+            RX_ASSERT(n < sizeof...(Fs));
+
+            using Fn = output_type(*)(std::add_rvalue_reference<decltype(value)>, const disjunction&);
+            Fn fns[] = { &_get_at<Index>... };
+            return fns[n](std::forward<decltype(value)>, d);
+        }
+
+        template <class Vx, size_t Index>
+        static constexpr output_type _get_at(Vx&& value, const disjunction &d) {
+            return std::get<Index>(d.funcs)(std::forward<Vx>(value));
+        }
+    };
+
+    template <class InputRange, size_t Size = sizeof...(Fs)>
+    [[nodiscard]] constexpr auto operator()(InputRange&& input, std::enable_if_t<(Size > 2)>* = 0) const& {
+        using Inner = get_range_type_t<InputRange>;
+        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), *this};
+    }
+
+    template <class InputRange, size_t Size = sizeof...(Fs)>
+    [[nodiscard]] constexpr auto operator()(InputRange&& input, std::enable_if_t<(Size > 2)>* = 0) && {
+        using Inner = get_range_type_t<InputRange>;
+        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), std::move(*this)};
+    }
+
+    template <class InputRange, size_t Size = sizeof...(Fs)>
+    [[nodiscard]] constexpr auto operator()(InputRange&& input, std::enable_if_t<(Size == 2)>* = 0) const& {
+        return std::forward<InputRange>(input) | conditional(pred, std::get<1>(funcs), std::get<0>(funcs));
+    }
+
+    template <class InputRange, size_t Size = sizeof...(Fs)>
+    [[nodiscard]] constexpr auto operator()(InputRange&& input, std::enable_if_t<(Size == 2)>* = 0) && {
+        return std::forward<InputRange>(input) | conditional(pred, std::move(std::get<1>(funcs)), std::move(std::get<0>(funcs)));
+    }
+};
+template <class P, class... Fs>
+disjunction(P&&, Fs&&...)->disjunction<remove_cvref_t<P>, remove_cvref_t<Fs>...>;
 
 } // namespace RX_NAMESPACE
 
