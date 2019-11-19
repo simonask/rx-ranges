@@ -115,7 +115,9 @@ jobs:
     - name: build
       run: ninja -C build
     - name: run tests
-      run: build/rx-ranges-test && build/rx-benchmark
+      run: build/rx-ranges-test
+    - name: run benchmarks
+      run: build/rx-benchmark
   Windows-MSVC-Benchmark:
     runs-on: windows-latest
     steps:
