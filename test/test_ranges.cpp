@@ -204,7 +204,7 @@ TEST_CASE("ranges generate reentrant") {
 }
 
 TEST_CASE("ranges until") {
-    auto input = seq() | until([](int x) { return x == 5; }) | take(10);
+    auto input = seq() | until([](int x) { return x == 5; });
     auto result = input | to_vector();
     auto expected = seq() | first_n(5) | to_vector();
     CHECK(result == expected);
