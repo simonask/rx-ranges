@@ -12,22 +12,17 @@ using namespace RX_NAMESPACE;
 
 namespace greg = boost::gregorian;
 using date_t = greg::date;
-using dates_t = std::vector<date_t>;
 
 static void make_calendar(uint16_t year, uint8_t num_months_horizontally, std::ostream& os) {
     static const std::array<std::string, 12> s_month_names = {
         "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-    generate([date = date_t(year, greg::Jan, 1)]() mutable {
-        auto ret = date;
-        date = date + greg::date_duration(1);
-        return ret;
-    })                                                         //
-        | until([year](date_t x) { return x.year() != year; }) //
+    seq(date_t(year, greg::Jan, 1), greg::date_duration(1))
+        | until([year](date_t x) { return x.year() != year; })
         | group_adjacent_by(
-            [](const date_t& d) { return std::make_pair(d.month(), d.week_number()); }) //
-        | transform([&](dates_t wk_dates) -> std::pair<date_t::month_type, std::string> {
-              const auto left_pad_amt = size_t(3 * ((wk_dates.front().day_of_week() + 7 - 1) % 7));
-              return {wk_dates.front().month(),
+            [](const date_t& d) { return std::make_pair(d.month(), d.week_number()); })
+        | transform([&](const auto &wk_dates) -> std::pair<date_t::month_type, std::string> {
+              const auto left_pad_amt = size_t(3 * ((wk_dates.get().day_of_week() + 7 - 1) % 7));
+              return {wk_dates.get().month(),
                       wk_dates
                           | foldl(
                               std::string(left_pad_amt, ' '),
@@ -40,7 +35,7 @@ static void make_calendar(uint16_t year, uint8_t num_months_horizontally, std::o
         | in_groups_of(num_months_horizontally)                    //
         | for_each([&](const auto& group) {
               for (int row = -2; row < 6; ++row) {
-                  for (const auto& mo : group) {
+                  for (const auto& mo : group | transform(to_vector())) {
                       os << std::setiosflags(std::ios::left) << std::setw(25)
                          << (row == -2 ? "        " + s_month_names.at(mo.front().first - 1u)
                                        : row == -1 ? " Mo Tu We Th Fr Sa Su"

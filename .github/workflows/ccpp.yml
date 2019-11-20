@@ -1,19 +1,168 @@
 name: C/C++ CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [master]
+  pull_request: []
 
 jobs:
-  test-linux:
+  Linux-GCC9:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
     - name: install dependencies
-      run: sudo apt-get install libboost-dev doctest-dev
+      run: (sudo apt-get update && sudo apt-get install libboost-date-time-dev ninja-build cmake build-essential g++-9)
     - name: make build dir
       run: mkdir build
     - name: configure
-      run: (cd build && cmake .. -G Ninja -DRX_TEST=ON -DCMAKE_BUILD_TYPE=Debug)
+      run: (cd build && cmake .. -G Ninja -DRX_TEST=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=/usr/bin/g++-9)
     - name: build
       run: ninja -C build
     - name: run tests
       run: build/rx-ranges-test
+    - name: run calendar example
+      run: build/rx-calendar
+  Linux-Clang8:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: install dependencies
+      run: (sudo apt-get update && sudo apt-get install libboost-date-time-dev ninja-build cmake build-essential clang-8)
+    - name: make build dir
+      run: mkdir build
+    - name: configure
+      run: (cd build && cmake .. -G Ninja -DRX_TEST=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=/usr/bin/clang++-8)
+    - name: build
+      run: ninja -C build
+    - name: run tests
+      run: build/rx-ranges-test
+    - name: run calendar example
+      run: build/rx-calendar
+  Linux-Clang8-Libcxx:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: install dependencies
+      run: (sudo apt-get update && sudo apt-get install libboost-date-time-dev ninja-build cmake build-essential clang-8 libc++-8-dev libc++abi-8-dev)
+    - name: make build dir
+      run: mkdir build
+    - name: configure
+      run: (cd build && cmake .. -G Ninja -DRX_TEST=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=/usr/bin/clang++-8 -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_FLAGS="-stdlib=libc++" -DCMAKE_EXE_LINKER_FLAGS="-lc++ -lm -lc -lgcc_s -lgcc")
+    - name: build
+      run: ninja -C build
+    - name: run tests
+      run: build/rx-ranges-test
+    - name: run calendar example
+      run: build/rx-calendar
+  Windows-MSVC:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: install dependencies
+      run: '& "$Env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install boost-date-time:x64-windows'
+    - name: make build dir
+      run: md build
+    - name: configure
+      run: 'cd build; cmake .. -DCMAKE_TOOLCHAIN_FILE="$Env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows -G "Visual Studio 16 2019" -DCMAKE_PLATFORM_ARCH=x64 -DRX_TEST=ON; cd ..'
+    - name: build
+      run: cd build; cmake --build . --config Debug; cd ..
+    - name: run tests
+      run: build/Debug/rx-ranges-test.exe
+    - name: run calendar example
+      run: build/Debug/rx-calendar.exe
+  macOS-Clang:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: install dependencies
+      run: brew install ninja boost
+    - name: make build dir
+      run: mkdir build
+    - name: configure
+      run: cd build && cmake .. -DCMAKE_BUILD_TYPE=Debug -DRX_TEST=ON -GNinja && cd ..
+    - name: build
+      run: ninja -C build
+    - name: run tests
+      run: build/rx-ranges-test
+    - name: run calendar example
+      run: build/rx-calendar
+  Linux-GCC9-Benchmark:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: install dependencies
+      run: (sudo apt-get update && sudo apt-get install libboost-date-time-dev ninja-build cmake build-essential g++-9)
+    - name: make build dir
+      run: mkdir build
+    - name: configure
+      run: (cd build && cmake .. -G Ninja -DRX_TEST=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=/usr/bin/g++-9)
+    - name: build
+      run: ninja -C build
+    - name: run tests
+      run: build/rx-ranges-test
+    - name: run benchmarks
+      run: build/rx-benchmark
+  Linux-Clang8-Benchmark:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: install dependencies
+      run: (sudo apt-get update && sudo apt-get install libboost-date-time-dev ninja-build cmake build-essential clang-8)
+    - name: make build dir
+      run: mkdir build
+    - name: configure
+      run: (cd build && cmake .. -G Ninja -DRX_TEST=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=/usr/bin/clang++-8 -DCMAKE_C_COMPILER=/usr/bin/clang-8)
+    - name: build
+      run: ninja -C build
+    - name: run tests
+      run: build/rx-ranges-test
+    - name: run benchmarks
+      run: build/rx-benchmark
+  Windows-MSVC-Benchmark:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: install dependencies
+      run: '& "$Env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install boost-date-time:x64-windows'
+    - name: make build dir
+      run: md build
+    - name: configure
+      run: 'cd build; cmake .. -DCMAKE_TOOLCHAIN_FILE="$Env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows -G "Visual Studio 16 2019" -DCMAKE_PLATFORM_ARCH=x64 -DRX_TEST=ON; cd ..'
+    - name: build
+      run: cd build; cmake --build . --config Release; cd ..
+    - name: run tests
+      run: build/Release/rx-ranges-test.exe
+    - name: run benchmarks
+      run: build/Release/rx-benchmark.exe
+  macOS-Clang-Benchmark:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: install dependencies
+      run: brew install ninja boost
+    - name: make build dir
+      run: mkdir build
+    - name: configure
+      run: cd build && cmake .. -DCMAKE_BUILD_TYPE=Release -DRX_TEST=ON -GNinja && cd ..
+    - name: build
+      run: ninja -C build
+    - name: run tests
+      run: build/rx-ranges-test
+    - name: run benchmarks
+      run: build/rx-benchmark
+  Linux-Clang8-libcxx-Benchmark:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: install dependencies
+      run: (sudo apt-get update && sudo apt-get install libboost-date-time-dev ninja-build cmake build-essential clang-8 libc++-8-dev libc++abi-8-dev)
+    - name: make build dir
+      run: mkdir build
+    - name: configure
+      run: (cd build && cmake .. -G Ninja -DRX_TEST=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=/usr/bin/clang++-8 -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_FLAGS="-stdlib=libc++" -DCMAKE_EXE_LINKER_FLAGS="-lc++ -lm -lc -lgcc_s -lgcc")
+    - name: build
+      run: ninja -C build
+    - name: run tests
+      run: build/rx-ranges-test
+    - name: run benchmarks
+      run: build/rx-benchmark

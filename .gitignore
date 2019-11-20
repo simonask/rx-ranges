@@ -1,4 +1,10 @@
 build/*
 build.*/*
-out/*
+
+# Created by Visual Studio Code
 .vscode/*
+
+# Created by Visual Studio "Open Folder"
+out/*
+.vs/*
+CMakeSettings.json
