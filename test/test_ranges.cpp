@@ -566,6 +566,37 @@ TEST_CASE("ranges chain") {
     CHECK(homogenous_actual == homogenous_expected);
 }
 
+struct NoDefaultConstruction {
+    NoDefaultConstruction() = delete;
+    NoDefaultConstruction(int i_) : i{ i_ } {}
+
+    int i;
+
+    friend bool operator==(NoDefaultConstruction const& lhs, NoDefaultConstruction const& rhs) { return lhs.i == rhs.i; }
+};
+
+TEST_CASE("ranges chain no-default-constructible type") {
+    std::vector<NoDefaultConstruction> vec1{
+        NoDefaultConstruction(1),
+        NoDefaultConstruction(2)
+    };
+
+    std::vector<NoDefaultConstruction> vec2{
+        NoDefaultConstruction(3),
+        NoDefaultConstruction(4)
+    };
+
+    std::vector<NoDefaultConstruction> vec_expected{
+        NoDefaultConstruction(1),
+        NoDefaultConstruction(2),
+        NoDefaultConstruction(3),
+        NoDefaultConstruction(4)
+    };
+
+    auto vec_actual = chain(vec1, vec2) | to_vector();
+    CHECK(vec_actual == vec_expected);
+}
+
 TEST_CASE("ranges chain advance_by") {
     auto input = chain(seq() | take(3), seq(10) | take(3), seq(20) | take(3));
     auto result1 = input | to_vector();
