@@ -14,7 +14,7 @@ namespace greg = boost::gregorian;
 using date_t = greg::date;
 
 static void make_calendar(uint16_t year, uint8_t num_months_horizontally, std::ostream& os) {
-    static const std::array<std::string, 12> s_month_names = {
+    static constexpr std::array s_month_names = {
         "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
     seq(date_t(year, greg::Jan, 1), greg::date_duration(1))
         | until([year](date_t x) { return x.year() != year; })
@@ -37,7 +37,7 @@ static void make_calendar(uint16_t year, uint8_t num_months_horizontally, std::o
               for (int row = -2; row < 6; ++row) {
                   for (const auto& mo : group | transform(to_vector())) {
                       os << std::setiosflags(std::ios::left) << std::setw(25)
-                         << (row == -2 ? "        " + s_month_names.at(mo.front().first - 1u)
+                         << (row == -2 ? std::string{"        "} + s_month_names.at(mo.front().first - 1u)
                                        : row == -1 ? " Mo Tu We Th Fr Sa Su"
                                                    : size_t(row) < mo.size()
                                                          ? mo[row].second // formatted week
