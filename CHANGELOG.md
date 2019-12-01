@@ -1,3 +1,12 @@
+## Version 2.0.1
+
+Many optimizations, bug fixes, and new features. With this version, the popular "calendar" showcase
+for range libraries is supported (see [./test/calendar.cpp](calendar.cpp) for more).
+
+### Other
+
+- ChainRange does not require the output type to be default-constructible.
+
 ## Version 2.0.0
 
 Many optimizations, bug fixes, and new features. With this version, the popular "calendar" showcase
