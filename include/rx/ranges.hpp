@@ -1242,9 +1242,7 @@ struct in_groups_of_exactly {
     const size_t n;
 
     constexpr explicit in_groups_of_exactly(size_t n) : n(n) {
-        if (n == 0) {
-            throw std::runtime_error("in_groups_of_exactly(0) is not allowed");
-        }
+        RX_ASSERT(n > 0);
     }
 
     template <class R>
