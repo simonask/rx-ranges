@@ -1241,7 +1241,7 @@ template <class... Inputs>
 struct in_groups_of_exactly {
     const size_t n;
 
-    constexpr explicit in_groups_of_exactly(size_t n) : n(n) {
+    constexpr explicit in_groups_of_exactly(size_t n) noexcept : n(n) {
         RX_ASSERT(n > 0);
     }
 
@@ -1323,10 +1323,8 @@ struct in_groups_of_exactly {
 struct in_groups_of {
     size_t n;
 
-    constexpr explicit in_groups_of(size_t n) : n(n) {
-        if (n == 0) {
-            throw std::runtime_error("in_groups_of(0) is not allowed");
-        }
+    constexpr explicit in_groups_of(size_t n) noexcept : n(n) {
+        RX_ASSERT(n > 0);
     }
 
     template <class R>
