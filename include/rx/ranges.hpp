@@ -8,6 +8,7 @@
 #include <set>
 #include <type_traits>
 #include <vector>
+#include <cstdlib>
 
 // This override is provided to avoid name clashes in foreign codebases where `rx` already has a
 // different meaning.
@@ -2048,10 +2049,12 @@ struct ChainRange {
     }
 
 private:
+    [[noreturn]]
     constexpr output_type _get(std::index_sequence<>) const {
         RX_ASSERT(false); // chain was at end!
-        return output_type{};
+        std::abort();
     }
+
 
     template <size_t i, size_t... rest>
     constexpr output_type _get(std::index_sequence<i, rest...>) const {
