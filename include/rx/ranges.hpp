@@ -2135,7 +2135,7 @@ template <class First, class... InputRanges>
     }
 }
 [[nodiscard]] constexpr auto chain() noexcept {
-    return empty_range();
+    return empty_range<void*>();
 }
 
 /// Create an infinite range repeating the input elements in a loop.
