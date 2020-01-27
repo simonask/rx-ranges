@@ -454,6 +454,9 @@ sink(const In& in, Out& out, std::enable_if_t<!is_input_or_sink_v<In>>* = nullpt
 */
 template <class It, class EndIt = It>
 struct iterator_range {
+    static_assert(std::is_base_of_v<std::forward_iterator_tag,
+        typename std::iterator_traits<It>::iterator_category>);
+
     using iterator_type = It;
     using end_iterator_type = EndIt;
     using output_type = decltype(*std::declval<const iterator_type&>());
@@ -619,12 +622,11 @@ namespace detail {
 
     template <class T>
     constexpr auto as_input_range_impl(input_category::other, const T& container) noexcept {
-        return iterator_range(container.begin(), container.end());
-    }
-
-    template <class T, size_t N>
-    constexpr auto as_input_range_impl(input_category::other, T (&arr)[N]) noexcept {
-        return iterator_range(std::begin(arr), std::end(arr));
+        using std::begin;
+        using std::end;
+        static_assert(std::is_base_of_v<std::forward_iterator_tag,
+            typename std::iterator_traits<decltype(begin(container))>::iterator_category>);
+        return iterator_range(begin(container), end(container));
     }
 } // namespace detail
 
