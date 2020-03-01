@@ -34,6 +34,21 @@ TEST_CASE("range take advance_by overflow") {
     CHECK(arithmetic.i == arithmetic.n);
 }
 
+TEST_CASE("range member variable") {
+    using pair_t = std::pair<int, std::string>;
+    auto input = std::vector{ pair_t{1, "1"s}, pair_t{2, "2"s}, pair_t{3, "3"s}};
+    auto strings = input | member(&pair_t::first) | to_vector();
+    auto expected = std::vector{1, 2, 3};
+    CHECK(strings == expected);
+}
+
+TEST_CASE("range member function") {
+    auto input = std::vector<std::string>{"1", "22", "333", "4444"};
+    auto strings = input | member(&std::string::size) | to_vector();
+    auto expected = std::vector<size_t>{1, 2, 3, 4};
+    CHECK(strings == expected);
+}
+
 TEST_CASE("range transform") {
     auto input = std::vector{{1, 2, 3, 4}};
     auto strings = input | transform(&to_string<int>) | to_vector();

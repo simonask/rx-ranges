@@ -830,6 +830,105 @@ template <class T>
 fill(T &&)->fill<remove_cvref_t<T>>;
 
 /*!
+    @brief Return a member variable from a struct or class.
+
+    M must be a pointer over member variable of the objects contained in the input range.
+*/
+template <class M, bool = std::is_member_object_pointer_v<M>>
+struct member {
+    M pmv;
+    explicit constexpr member(M pmv) noexcept : pmv(std::move(pmv)) {}
+
+    template <class InputRange>
+    struct Range {
+        InputRange input_;
+        M pmv_;
+        using output_type = decltype(input_.get().*pmv_);
+        static constexpr bool is_finite = is_finite_v<InputRange>;
+        static constexpr bool is_idempotent = true;
+
+        constexpr Range(InputRange input, M pmv) noexcept
+            : input_(std::move(input)), pmv_(std::move(pmv)) {}
+        constexpr void next() {
+            RX_ASSERT(!at_end());
+            input_.next();
+        }
+        constexpr output_type get() const {
+            RX_ASSERT(!at_end());
+            return input_.get().*pmv_;
+        }
+        constexpr bool at_end() const {
+            return input_.at_end();
+        }
+        constexpr size_t size_hint() const noexcept {
+            return input_.size_hint();
+        }
+        constexpr size_t advance_by(size_t n) noexcept {
+            using RX_NAMESPACE::advance_by;
+            return advance_by(input_, n);
+        }
+    };
+
+    template <class InputRange>
+    [[nodiscard]] constexpr auto operator()(InputRange&& input) const noexcept {
+        using Inner = get_range_type_t<InputRange>;
+        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), pmv};
+    }
+};
+
+/*!
+    @brief Return the value of a member function from a struct or class.
+
+    M must be a pointer over member function of the objects contained in the input range.
+*/
+template <class M>
+struct member<M, false> {
+    static_assert(std::is_member_function_pointer_v<M>,
+                  "M must be a pointer over member function");
+
+    M pmf;
+    explicit constexpr member(M pmf) noexcept : pmf(std::move(pmf)) {}
+
+    template <class InputRange>
+    struct Range {
+        InputRange input_;
+        M pmf_;
+        using output_type = decltype((input_.get().*pmf_)());
+        static constexpr bool is_finite = is_finite_v<InputRange>;
+        static constexpr bool is_idempotent = false; // `pmf` is called each time `get` is called
+
+        constexpr Range(InputRange input, M pmf) noexcept
+            : input_(std::move(input)), pmf_(std::move(pmf)) {}
+        constexpr void next() {
+            RX_ASSERT(!at_end());
+            input_.next();
+        }
+        constexpr output_type get() const {
+            RX_ASSERT(!at_end());
+            return (input_.get().*pmf_)();
+        }
+        constexpr bool at_end() const {
+            return input_.at_end();
+        }
+        constexpr size_t size_hint() const noexcept {
+            return input_.size_hint();
+        }
+        constexpr size_t advance_by(size_t n) noexcept {
+            using RX_NAMESPACE::advance_by;
+            return advance_by(input_, n);
+        }
+    };
+
+    template <class InputRange>
+    [[nodiscard]] constexpr auto operator()(InputRange&& input) const noexcept {
+        using Inner = get_range_type_t<InputRange>;
+        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), pmf};
+    }
+};
+template <class M>
+member(M &&)->member<remove_cvref_t<M>>;
+
+/*!
     @brief Transform a range of values by a function F.
 
     Each output is produced by passing the output of the inner range to the function F.

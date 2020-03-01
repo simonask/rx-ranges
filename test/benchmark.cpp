@@ -327,4 +327,52 @@ static void bench_all_of_std(benchmark::State& state) {
 }
 BENCHMARK(bench_all_of_std);
 
+static void bench_member_rx(benchmark::State& state) {
+    using pair_t = std::pair<int, int>;
+    std::vector<pair_t> input;
+    int n = 0;
+    input.resize(1'000'000);
+    std::generate(begin(input), end(input), [&] { return pair_t{n++,n++}; });
+    for (auto _ : state) {
+        auto f = [](auto begin, auto end) constexpr {
+            return iterator_range(begin, end) | member(&pair_t::first) | sum();
+        };
+        benchmark::DoNotOptimize(f(begin(input), end(input)));
+    }
+}
+BENCHMARK(bench_member_rx);
+
+static void bench_member_transform_rx(benchmark::State& state) {
+    using pair_t = std::pair<int, int>;
+    std::vector<pair_t> input;
+    int n = 0;
+    input.resize(1'000'000);
+    std::generate(begin(input), end(input), [&] { return pair_t{n++,n++}; });
+    for (auto _ : state) {
+        auto f = [](auto begin, auto end) constexpr {
+            return iterator_range(begin, end) | transform([](const auto&p) { return p.first; })
+                   | sum();
+        };
+        benchmark::DoNotOptimize(f(begin(input), end(input)));
+    }
+}
+BENCHMARK(bench_member_transform_rx);
+
+static void bench_member_std(benchmark::State& state) {
+    using pair_t = std::pair<int, int>;
+    std::vector<pair_t> input;
+    int n = 0;
+    input.resize(1'000'000);
+    std::generate(begin(input), end(input), [&] { return pair_t{n++,n++}; });
+    for (auto _ : state) {
+        auto f = [](auto begin, auto end) constexpr {
+            int sum = 0;
+            std::for_each(begin, end, [&](const auto &p) { sum += p.first; });
+            return sum;
+        };
+        benchmark::DoNotOptimize(f(begin(input), end(input)));
+    }
+}
+BENCHMARK(bench_member_std);
+
 BENCHMARK_MAIN();
