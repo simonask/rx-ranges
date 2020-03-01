@@ -830,82 +830,50 @@ template <class T>
 fill(T &&)->fill<remove_cvref_t<T>>;
 
 /*!
-    @brief Return a member variable from a struct or class.
+    @brief Return a member variable or the result of a member function.
 
-    M must be a pointer over member variable of the objects contained in the input range.
-*/
-template <class M, bool = std::is_member_object_pointer_v<M>>
-struct member {
-    M pmv;
-    explicit constexpr member(M pmv) noexcept : pmv(std::move(pmv)) {}
-
-    template <class InputRange>
-    struct Range {
-        InputRange input_;
-        M pmv_;
-        using output_type = decltype(input_.get().*pmv_);
-        static constexpr bool is_finite = is_finite_v<InputRange>;
-        static constexpr bool is_idempotent = true;
-
-        constexpr Range(InputRange input, M pmv) noexcept
-            : input_(std::move(input)), pmv_(std::move(pmv)) {}
-        constexpr void next() {
-            RX_ASSERT(!at_end());
-            input_.next();
-        }
-        constexpr output_type get() const {
-            RX_ASSERT(!at_end());
-            return input_.get().*pmv_;
-        }
-        constexpr bool at_end() const {
-            return input_.at_end();
-        }
-        constexpr size_t size_hint() const noexcept {
-            return input_.size_hint();
-        }
-        constexpr size_t advance_by(size_t n) noexcept {
-            using RX_NAMESPACE::advance_by;
-            return advance_by(input_, n);
-        }
-    };
-
-    template <class InputRange>
-    [[nodiscard]] constexpr auto operator()(InputRange&& input) const noexcept {
-        using Inner = get_range_type_t<InputRange>;
-        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), pmv};
-    }
-};
-
-/*!
-    @brief Return the value of a member function from a struct or class.
-
-    M must be a pointer over member function of the objects contained in the input range.
+    M must be a pointer over member variable or member function over the elements
+    contained in the input range.
 */
 template <class M>
-struct member<M, false> {
-    static_assert(std::is_member_function_pointer_v<M>,
-                  "M must be a pointer over member function");
+struct member {
+    M pm;
 
-    M pmf;
-    explicit constexpr member(M pmf) noexcept : pmf(std::move(pmf)) {}
+    static_assert(std::is_member_pointer_v<M>,
+                  "M must be a pointer over member");
+    static constexpr bool is_pmv = std::is_member_object_pointer_v<M>;
+
+    template <class R>
+    struct pmf_output { using type = decltype((std::declval<R&>().get().*pm)()); };
+    template <class R>
+    struct pmv_output { using type = decltype(std::declval<R&>().get().*pm); };
+
+    explicit constexpr member(M pm) noexcept : pm(std::move(pm)) {}
 
     template <class InputRange>
     struct Range {
         InputRange input_;
-        M pmf_;
-        using output_type = decltype((input_.get().*pmf_)());
+        M pm_;
+        using output_type = typename std::conditional_t<is_pmv,
+                                                        pmv_output<InputRange>,
+                                                        pmf_output<InputRange>>::type;
         static constexpr bool is_finite = is_finite_v<InputRange>;
-        static constexpr bool is_idempotent = false; // `pmf` is called each time `get` is called
+        static constexpr bool is_idempotent = std::is_member_object_pointer_v<M> &&
+                                              is_idempotent_v<InputRange>;
 
-        constexpr Range(InputRange input, M pmf) noexcept
-            : input_(std::move(input)), pmf_(std::move(pmf)) {}
+        constexpr Range(InputRange input, M pm) noexcept
+            : input_(std::move(input)), pm_(std::move(pm)) {}
         constexpr void next() {
             RX_ASSERT(!at_end());
             input_.next();
         }
         constexpr output_type get() const {
             RX_ASSERT(!at_end());
-            return (input_.get().*pmf_)();
+            if constexpr (is_pmv) {
+                return input_.get().*pm_;
+            } else {
+                return (input_.get().*pm_)();
+            }
         }
         constexpr bool at_end() const {
             return input_.at_end();
@@ -922,7 +890,7 @@ struct member<M, false> {
     template <class InputRange>
     [[nodiscard]] constexpr auto operator()(InputRange&& input) const noexcept {
         using Inner = get_range_type_t<InputRange>;
-        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), pmf};
+        return Range<Inner>{as_input_range(std::forward<InputRange>(input)), pm};
     }
 };
 template <class M>
