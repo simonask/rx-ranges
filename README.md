@@ -94,6 +94,8 @@ Algorithms that produce ranges from the output of other ranges.
 - `in_groups_of()`: Produce subranges containing at least one and at most `n` elements.
 - `in_groups_of_exactly()`: Produce subranges containing exactly `n` elements, discarding elements
   at the end if number of input elements is not divisible by `n`.
+- `member()`: Produce a range by returning a member value or calling a member function of the
+  elements of an input range.
 - `skip_n()`: Produce all elements from an input range after skipping `n` elements.
 - `take()`: Produce the first `n` elements of an input range.
 - `tee()`: Copy values of a range into a container during iteration, forwarding the value unmodified
