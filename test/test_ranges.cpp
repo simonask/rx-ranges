@@ -307,6 +307,9 @@ TEST_CASE("ranges max") {
 TEST_CASE("ranges min") {
     auto s = seq() | first_n(5) | min();
     CHECK(*s == 0);
+
+    s = seq() | skip_n(1) | first_n(5) | min();
+    CHECK(*s == 1);
 }
 
 TEST_CASE("ranges infinity propagates") {

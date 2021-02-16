@@ -1701,8 +1701,10 @@ struct min : private Compare {
         decltype(auto) input = as_input_range(std::forward<R>(range));
         using range_type = decltype(input);
         if (RX_LIKELY(!input.at_end())) {
+            type first = input.get();
+            input.next();
             auto folder = foldl(
-                type{}, [this](auto&& accum, auto&& x) constexpr {
+                std::move(first), [this](auto&& accum, auto&& x) constexpr {
                     // Note: Can't use std::min(), because it takes the comparison function
                     // by-value.
                     const Compare& cmp = *this;
