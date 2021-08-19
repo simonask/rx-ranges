@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <list>
+#include <limits>
 #include <map>
 #include <set>
 #include <type_traits>
