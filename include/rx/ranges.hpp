@@ -9,6 +9,7 @@
 #include <type_traits>
 #include <vector>
 #include <cstdlib>
+#include <iterator>
 
 // This override is provided to avoid name clashes in foreign codebases where `rx` already has a
 // different meaning.
