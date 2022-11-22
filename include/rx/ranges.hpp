@@ -9,6 +9,7 @@
 #include <type_traits>
 #include <vector>
 #include <cstdlib>
+#include <iterator>
 
 // This override is provided to avoid name clashes in foreign codebases where `rx` already has a
 // different meaning.
@@ -1149,7 +1150,7 @@ struct ZipRange {
     static constexpr bool is_idempotent = (is_idempotent_v<Inputs> && ...);
 
     template <class... Tx>
-    constexpr explicit ZipRange(std::tuple<Tx...>&& tuple) : inputs(tuple) {}
+    constexpr explicit ZipRange(std::tuple<Tx...>&& tuple) : inputs(std::move(tuple)) {}
 
     [[nodiscard]] constexpr output_type get() const noexcept {
         RX_ASSERT(!at_end());
@@ -1701,8 +1702,10 @@ struct min : private Compare {
         decltype(auto) input = as_input_range(std::forward<R>(range));
         using range_type = decltype(input);
         if (RX_LIKELY(!input.at_end())) {
+            type first = input.get();
+            input.next();
             auto folder = foldl(
-                type{}, [this](auto&& accum, auto&& x) constexpr {
+                std::move(first), [this](auto&& accum, auto&& x) constexpr {
                     // Note: Can't use std::min(), because it takes the comparison function
                     // by-value.
                     const Compare& cmp = *this;
