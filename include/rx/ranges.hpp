@@ -1149,7 +1149,7 @@ struct ZipRange {
     static constexpr bool is_idempotent = (is_idempotent_v<Inputs> && ...);
 
     template <class... Tx>
-    constexpr explicit ZipRange(std::tuple<Tx...>&& tuple) : inputs(tuple) {}
+    constexpr explicit ZipRange(std::tuple<Tx...>&& tuple) : inputs(std::move(tuple)) {}
 
     [[nodiscard]] constexpr output_type get() const noexcept {
         RX_ASSERT(!at_end());
